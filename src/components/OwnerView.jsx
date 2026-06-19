@@ -11,6 +11,7 @@ import {
   applyDuePlannedLeaves,
   updateLeaveRecord,
   deleteLeaveRecord,
+  addLeaveRecord,
 } from "../data";
 import StaffManager from "./StaffManager";
 import { S } from "../styles";
@@ -190,6 +191,13 @@ function StaffHistoryCard({ staff, records, onClose, onChanged }) {
   const sorted = [...records].sort((a, b) => (a.date < b.date ? 1 : -1));
   const ng = nextGrant(staff.joinDate, staff.workDaysPerWeek);
   const [editing, setEditing] = useState(null);
+  const [showProxy, setShowProxy] = useState(false);
+
+  async function handleProxyAdd(rec) {
+    await addLeaveRecord(staff.id, staff.name, rec, false); // 代理登録は通知なし
+    setShowProxy(false);
+    await onChanged();
+  }
 
   async function handleDelete(r) {
     if (r.type === "planned") return;
@@ -271,6 +279,16 @@ function StaffHistoryCard({ staff, records, onClose, onChanged }) {
         通常の取得は編集・削除できます。計画年休の記録は計画年休タブで管理するため、ここでは変更できません。
       </p>
 
+      <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${"#e2ded5"}` }}>
+        {!showProxy ? (
+          <button style={S.btnGhost} onClick={() => setShowProxy(true)}>
+            ＋ 院長が代理で取得を登録（過去分の入力にも）
+          </button>
+        ) : (
+          <ProxyAddForm staff={staff} onAdd={handleProxyAdd} onCancel={() => setShowProxy(false)} />
+        )}
+      </div>
+
       {editing && (
         <EditRecordModal
           record={editing}
@@ -280,6 +298,81 @@ function StaffHistoryCard({ staff, records, onClose, onChanged }) {
         />
       )}
     </section>
+  );
+}
+
+// 院長による代理登録フォーム。過去日OK。区分（通常/計画年休）を選べる。
+// 入力は「日数」または「分」のどちらでも。日数→分はその人の1日分で換算。
+function ProxyAddForm({ staff, onAdd, onCancel }) {
+  const daily = staff.dailyMinutes || 480;
+  const [date, setDate] = useState(todayStr());
+  const [mode, setMode] = useState("days"); // "days" or "minutes"
+  const [days, setDays] = useState("1");
+  const [minutes, setMinutes] = useState(String(daily));
+  const [type, setType] = useState("normal");
+  const [memo, setMemo] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const computedMin = mode === "days" ? Math.round(Number(days || 0) * daily) : Number(minutes || 0);
+
+  async function submit() {
+    if (!date || !computedMin) return;
+    setBusy(true);
+    try {
+      await onAdd({ date, minutes: computedMin, type, memo });
+    } catch (e) {
+      console.error(e);
+      alert("登録に失敗しました。");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div style={{ background: "#fbfaf7", border: `1px solid ${"#e2ded5"}`, borderRadius: 12, padding: 16 }}>
+      <h3 style={S.subTitle}>代理で取得を登録</h3>
+
+      <label style={S.fieldLabel}>取得日（過去の日付もOK）</label>
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={S.input} />
+
+      <label style={S.fieldLabel}>区分</label>
+      <div style={S.quickRow}>
+        <button type="button" style={type === "normal" ? S.quickBtnOn : S.quickBtn} onClick={() => setType("normal")}>通常取得</button>
+        <button type="button" style={type === "planned" ? S.quickBtnOn : S.quickBtn} onClick={() => setType("planned")}>計画年休</button>
+      </div>
+
+      <label style={S.fieldLabel}>
+        取得量の入力方法
+        <span style={S.hint}>昔の1日単位の記録は「日数」で。1日={daily}分で換算します。</span>
+      </label>
+      <div style={S.quickRow}>
+        <button type="button" style={mode === "days" ? S.quickBtnOn : S.quickBtn} onClick={() => setMode("days")}>日数で入力</button>
+        <button type="button" style={mode === "minutes" ? S.quickBtnOn : S.quickBtn} onClick={() => setMode("minutes")}>分で入力</button>
+      </div>
+
+      {mode === "days" ? (
+        <>
+          <label style={S.fieldLabel}>日数（0.5＝半日も可）</label>
+          <input type="number" step="0.5" value={days} onChange={(e) => setDays(e.target.value)} style={S.input} />
+          <p style={S.noteSmall}>→ 保存される分：{computedMin}分（{(computedMin / daily).toFixed(1)}日分）</p>
+        </>
+      ) : (
+        <>
+          <label style={S.fieldLabel}>分</label>
+          <input type="number" value={minutes} onChange={(e) => setMinutes(e.target.value)} style={S.input} />
+          <p style={S.noteSmall}>→ {(computedMin / daily).toFixed(1)}日分</p>
+        </>
+      )}
+
+      <label style={S.fieldLabel}>メモ（任意）</label>
+      <input type="text" placeholder="過去分 など" value={memo} onChange={(e) => setMemo(e.target.value)} style={S.input} />
+
+      <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+        <button style={{ ...S.btnPrimary, marginTop: 0, opacity: busy ? 0.6 : 1 }} onClick={submit} disabled={busy}>
+          {busy ? "登録中…" : "登録する"}
+        </button>
+        <button style={{ ...S.btnGhost, padding: "12px 20px" }} onClick={onCancel}>キャンセル</button>
+      </div>
+    </div>
   );
 }
 

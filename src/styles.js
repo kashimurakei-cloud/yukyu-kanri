@@ -80,6 +80,7 @@ export const S = {
 
   quickRow: { display: "flex", gap: 8, margin: "0 0 8px", flexWrap: "wrap" },
   quickBtn: { flex: 1, padding: "8px", borderRadius: 9, border: `1px solid ${line}`, background: accentSoft, color: accent, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
+  quickBtnOn: { flex: 1, padding: "8px", borderRadius: 9, border: `1px solid ${accent}`, background: accent, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
 
   notifHead: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   notifList: { listStyle: "none", padding: 0, margin: 0 },
