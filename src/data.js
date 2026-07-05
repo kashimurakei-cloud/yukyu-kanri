@@ -71,6 +71,25 @@ export async function deleteLeaveRecord(uid, recordId) {
   await deleteDoc(doc(db, "staff", uid, "leaveRecords", recordId));
 }
 
+/* ---------- アカウント再発行の引き継ぎ ----------
+   旧UIDのスタッフ情報と取得記録を新UIDへ丸ごとコピーし、旧データを削除する。
+   （パスワードを忘れた際、院長がコンソールで旧アカウント削除→アプリで再発行した後に使う） */
+export async function migrateStaffData(oldUid, newUid) {
+  const staff = await getStaff(oldUid);
+  if (!staff) throw new Error("旧データが見つかりません");
+  const { id: _omit, ...staffData } = staff;
+  await setDoc(doc(db, "staff", newUid), staffData);
+  const records = await getLeaveRecords(oldUid);
+  for (const r of records) {
+    const { id: _rid, ...recData } = r;
+    await addDoc(collection(db, "staff", newUid, "leaveRecords"), recData);
+  }
+  for (const r of records) {
+    await deleteDoc(doc(db, "staff", oldUid, "leaveRecords", r.id));
+  }
+  await deleteDoc(doc(db, "staff", oldUid));
+}
+
 /* ---------- 通知（院長のみ） ---------- */
 export async function getNotifications() {
   const q = query(collection(db, "notifications"), orderBy("createdAt", "desc"));

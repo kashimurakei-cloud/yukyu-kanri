@@ -59,10 +59,24 @@ const stubs = {
   "local-firebase": `
     export const db = {};
     export const auth = {};
+    export const STAFF_EMAIL_DOMAIN = "staff.yukyu-kanri.local";
+    export const loginIdToEmail = (v) => String(v).includes("@") ? v : v.toLowerCase() + "@" + STAFF_EMAIL_DOMAIN;
     export const login = async () => ({});
     export const logout = async () => {};
     export const resetPassword = async () => {};
-    export const watchAuth = (cb) => { setTimeout(() => cb({ uid: globalThis.__AUTH_UID }), 0); return () => {}; };
+    let created = 0;
+    export const createStaffAccount = async (loginId, pw) => {
+      globalThis.__createdAccounts = globalThis.__createdAccounts || [];
+      globalThis.__createdAccounts.push({ loginId, pw });
+      return "new-uid-" + (++created);
+    };
+    export const changePassword = async (cur, next) => {
+      globalThis.__pwChanged = { cur, next };
+    };
+    export const watchAuth = (cb) => {
+      setTimeout(() => cb(globalThis.__AUTH_UID ? { uid: globalThis.__AUTH_UID } : null), 0);
+      return () => {};
+    };
   `,
   "firebase/firestore": `
     const seg = (a) => a.filter((x) => typeof x === "string").join("/");
@@ -86,7 +100,14 @@ const stubs = {
       (globalThis.__DB[c.path] = globalThis.__DB[c.path] || []).push({ id, ...data });
       return { id };
     };
-    export const setDoc = async () => {};
+    export const setDoc = async (d, data) => {
+      const parts = d.path.split("/");
+      const col = parts.slice(0, -1).join("/"); const id = parts[parts.length - 1];
+      const arr = (globalThis.__DB[col] = globalThis.__DB[col] || []);
+      const row = arr.find((x) => x.id === id);
+      if (row) Object.assign(row, data);
+      else arr.push({ id, ...data });
+    };
     export const updateDoc = async (d, patch) => {
       const parts = d.path.split("/");
       const col = parts.slice(0, -1).join("/"); const id = parts[parts.length - 1];
@@ -252,6 +273,60 @@ try {
   click(byText(root2, "button", "取消"));
   await wait(700);
   console.log("Undo removes record:", globalThis.__DB["staff/u-a/leaveRecords"].length === before);
+
+  /* ========== パスワード変更(スタッフ側) ========== */
+  console.log("=== STAFF: PASSWORD ===");
+  html = root2.innerHTML;
+  console.log("Password card:", html.includes("パスワード変更"));
+  click(byText(root2, "button", "変更する"));
+  await wait(200);
+  const pwInputs = [...root2.querySelectorAll('input[type="password"]')];
+  console.log("3 password fields:", pwInputs.length === 3);
+  setVal(pwInputs[0], "oldpass1");
+  setVal(pwInputs[1], "newpass1");
+  setVal(pwInputs[2], "newpass1");
+  await wait(100);
+  click([...root2.querySelectorAll("button")].filter((b) => b.textContent === "変更する").pop());
+  await wait(500);
+  console.log("changePassword called:", globalThis.__pwChanged?.next === "newpass1");
+  console.log("Password toast:", root2.innerHTML.includes("パスワードを変更しました"));
+
+  /* ========== スタッフ管理: ログインID方式の新規作成 ========== */
+  console.log("=== OWNER: CREATE STAFF ===");
+  click(byText(rootEl, "button", "スタッフ管理"));
+  await wait(400);
+  click(byText(rootEl, "button", "＋ 新規スタッフ"));
+  await wait(300);
+  html = rootEl.innerHTML;
+  console.log("New form has ログインID+初期パスワード:", html.includes("ログインID") && html.includes("初期パスワード"));
+  console.log("No UID field:", !html.includes("Auth UID"));
+  const mgrInputs = [...rootEl.querySelectorAll("input")];
+  const nameInput = mgrInputs.find((i) => i.placeholder === "武田 秀美");
+  const idInput = mgrInputs.find((i) => i.placeholder === "hanako");
+  const pwInput = mgrInputs.find((i) => i.placeholder === "6文字以上");
+  const dateInput2 = mgrInputs.find((i) => i.type === "date");
+  setVal(nameInput, "田中 三奈");
+  setVal(idInput, "mina");
+  setVal(pwInput, "mina2026");
+  setVal(dateInput2, daysFrom(-365));
+  await wait(100);
+  click(byText(rootEl, "button", "保存"));
+  await wait(600);
+  const createdOk = (globalThis.__createdAccounts || []).some((a) => a.loginId === "mina");
+  const staffAdded = globalThis.__DB["staff"].some((s) => s.loginId === "mina" && s.name === "田中 三奈");
+  console.log("Account created via stub:", createdOk);
+  console.log("Staff doc saved with loginId:", staffAdded);
+
+  /* ========== ログイン画面(未ログイン時) ========== */
+  console.log("=== LOGIN SCREEN ===");
+  globalThis.__AUTH_UID = null;
+  const root3 = dom.window.document.createElement("div");
+  dom.window.document.body.appendChild(root3);
+  globalThis.__renderApp(root3);
+  await wait(600);
+  html = root3.innerHTML;
+  console.log("Login shows ログインID:", html.includes("ログインID") && !html.includes("メールアドレス"));
+  console.log("Login placeholder:", html.includes("例: hanako"));
 } catch (e) {
   console.error = origError;
   console.log("=== RENDER FAILED ===");

@@ -1,14 +1,15 @@
 import React, { useState } from "react";
-import { upsertStaff } from "../data";
+import { upsertStaff, migrateStaffData } from "../data";
+import { createStaffAccount } from "../firebase";
 import { WEEKDAYS } from "../lib/leave";
 import { S } from "../styles";
 
 /*
-  スタッフ管理：院長がスタッフ情報を登録・編集する。
-  注意：ここで作るのは Firestore の staff レコードのみ。
-  ログイン用の Authentication アカウントは、Firebaseコンソールで別途作成し、
-  発行された UID をこの画面の「Auth UID」に貼り付けて紐づける運用。
-  （ブラウザから他人のAuthアカウントを作るのはセキュリティ上避けるため）
+  スタッフ管理：院長がスタッフの登録・編集を全て行う。
+  新規登録では「氏名・ログインID・初期パスワード」からログインアカウントも同時に作成する
+  （secondary接続でcreateUserするので院長のログインは切れない）。
+  パスワードを忘れたスタッフには「アカウント再発行」：
+  院長がFirebaseコンソールで旧ユーザーを削除 → ここで新しい初期パスワードで再発行 → 記録は自動引き継ぎ。
 */
 export default function StaffManager({ staffList, onChanged }) {
   const [editing, setEditing] = useState(null); // 編集中のスタッフ or null
@@ -65,7 +66,11 @@ export default function StaffManager({ staffList, onChanged }) {
 
 function StaffForm({ initial, onCancel, onSaved }) {
   const isEdit = !!initial;
-  const [uid, setUid] = useState(initial?.id || "");
+  const [loginId, setLoginId] = useState(initial?.loginId || "");
+  const [initPassword, setInitPassword] = useState("");
+  const [reissuePw, setReissuePw] = useState("");
+  const [reissueBusy, setReissueBusy] = useState(false);
+  const [reissueMsg, setReissueMsg] = useState("");
   const [name, setName] = useState(initial?.name || "");
   const [joinDate, setJoinDate] = useState(initial?.joinDate || "");
   const [workDaysPerWeek, setWorkDaysPerWeek] = useState(initial?.workDaysPerWeek || 5);
@@ -82,50 +87,113 @@ function StaffForm({ initial, onCancel, onSaved }) {
 
   async function save() {
     setError("");
-    if (!uid) { setError("Auth UID を入力してください（Firebaseコンソールで作成したアカウントのUID）。"); return; }
     if (!name) { setError("氏名を入力してください。"); return; }
     if (!joinDate) { setError("入職日を入力してください。"); return; }
+    if (!isEdit) {
+      if (!/^[a-z0-9_-]{3,20}$/i.test(loginId)) {
+        setError("ログインIDは半角英数字3〜20文字で入力してください（例: hanako）。"); return;
+      }
+      if ((initPassword || "").length < 6) {
+        setError("初期パスワードは6文字以上にしてください。"); return;
+      }
+    }
     setBusy(true);
     try {
-      await upsertStaff(uid, {
+      const staffData = {
         name,
         role: "staff",
+        loginId: loginId.toLowerCase(),
         joinDate,
         workDaysPerWeek: Number(workDaysPerWeek),
         dailyMinutes: Number(dailyMinutes),
         minutesPerDay,
-      });
+      };
+      if (isEdit) {
+        await upsertStaff(initial.id, staffData);
+      } else {
+        const uid = await createStaffAccount(loginId, initPassword);
+        await upsertStaff(uid, staffData);
+      }
       onSaved();
     } catch (e) {
       console.error(e);
-      setError("保存に失敗しました。UIDが正しいか、通信状態を確認してください。");
+      if (e.code === "auth/email-already-in-use") {
+        setError("このログインIDはすでに使われています。別のIDにしてください。");
+      } else if (e.code === "auth/weak-password") {
+        setError("パスワードが弱すぎます。6文字以上にしてください。");
+      } else {
+        setError("保存に失敗しました。通信状態を確認してください。");
+      }
     }
     setBusy(false);
+  }
+
+  /* パスワードを忘れたスタッフのアカウント再発行（記録は引き継ぎ） */
+  async function reissue() {
+    setError(""); setReissueMsg("");
+    if ((reissuePw || "").length < 6) { setError("新しい初期パスワードは6文字以上にしてください。"); return; }
+    setReissueBusy(true);
+    try {
+      const newUid = await createStaffAccount(loginId, reissuePw);
+      await migrateStaffData(initial.id, newUid);
+      setReissueMsg(`再発行しました。新しい初期パスワードを${name}さんに伝えてください（本人が後から変更できます）。`);
+      setReissuePw("");
+      onSaved();
+    } catch (e) {
+      console.error(e);
+      if (e.code === "auth/email-already-in-use") {
+        setError("先にFirebaseコンソール（Authentication）で、このスタッフの旧アカウントを削除してください。");
+      } else {
+        setError("再発行に失敗しました。通信状態を確認してください。");
+      }
+    }
+    setReissueBusy(false);
   }
 
   return (
     <section style={S.card}>
       <h2 style={S.cardTitle}>{isEdit ? "スタッフを編集" : "新規スタッフを登録"}</h2>
 
-      {!isEdit && (
-        <div style={{ ...S.errorBox, background: "#fff7e6", color: "#8a6d2f" }}>
-          先にFirebaseコンソールの Authentication で、このスタッフのログイン用アカウント（メール＋パスワード）を作成し、
-          発行された <strong>User UID</strong> を下に貼り付けてください。
-        </div>
-      )}
-
-      <label style={S.fieldLabel}>Auth UID</label>
-      <input
-        type="text"
-        value={uid}
-        onChange={(e) => setUid(e.target.value)}
-        style={{ ...S.input, opacity: isEdit ? 0.6 : 1 }}
-        placeholder="例：KFzQB8EZH1VBNAMUKWAf8g55Y4t2"
-        disabled={isEdit}
-      />
-
       <label style={S.fieldLabel}>氏名</label>
       <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={S.input} placeholder="武田 秀美" />
+
+      {!isEdit ? (
+        <div className="grid2" style={S.grid2}>
+          <div>
+            <label style={S.fieldLabel}>
+              ログインID
+              <span style={S.hint}>半角英数字。本人がログインに使います（例: hanako）</span>
+            </label>
+            <input
+              type="text"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
+              style={S.input}
+              placeholder="hanako"
+              autoCapitalize="none"
+            />
+          </div>
+          <div>
+            <label style={S.fieldLabel}>
+              初期パスワード
+              <span style={S.hint}>6文字以上。本人に伝え、後で本人が変更できます</span>
+            </label>
+            <input
+              type="text"
+              value={initPassword}
+              onChange={(e) => setInitPassword(e.target.value)}
+              style={S.input}
+              placeholder="6文字以上"
+              autoCapitalize="none"
+            />
+          </div>
+        </div>
+      ) : (
+        <>
+          <label style={S.fieldLabel}>ログインID（変更不可）</label>
+          <input type="text" value={loginId || "（旧方式：未設定）"} style={{ ...S.input, opacity: 0.6 }} disabled />
+        </>
+      )}
 
       <label style={S.fieldLabel}>入職日</label>
       <input type="date" value={joinDate} onChange={(e) => setJoinDate(e.target.value)} style={S.input} />
@@ -171,6 +239,34 @@ function StaffForm({ initial, onCancel, onSaved }) {
         </button>
         <button onClick={onCancel} style={{ ...S.btnGhost, padding: "12px 20px" }}>キャンセル</button>
       </div>
+
+      {isEdit && loginId && (
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px dashed #e2ded5" }}>
+          <h3 style={S.subTitle}>🔑 パスワードを忘れた場合（アカウント再発行）</h3>
+          <p style={S.noteSmall}>
+            手順: ① Firebaseコンソールの Authentication で「{loginId}@staff.yukyu-kanri.local」のユーザーを削除
+            → ② 下に新しい初期パスワードを入れて再発行。取得記録は自動で引き継がれます。
+          </p>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 8 }}>
+            <input
+              type="text"
+              value={reissuePw}
+              onChange={(e) => setReissuePw(e.target.value)}
+              style={{ ...S.input, flex: 1 }}
+              placeholder="新しい初期パスワード（6文字以上）"
+              autoCapitalize="none"
+            />
+            <button
+              onClick={reissue}
+              style={{ ...S.btnGhost, padding: "11px 16px", whiteSpace: "nowrap", opacity: reissueBusy ? 0.6 : 1 }}
+              disabled={reissueBusy}
+            >
+              {reissueBusy ? "再発行中…" : "再発行"}
+            </button>
+          </div>
+          {reissueMsg && <div style={{ ...S.errorBox, background: "#e8f3ee", color: "#2f6358" }}>{reissueMsg}</div>}
+        </div>
+      )}
     </section>
   );
 }

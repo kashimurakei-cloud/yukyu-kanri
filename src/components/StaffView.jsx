@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { calcBalance, nextGrant, calcUpcomingPlanned, fiveDayProgress, expiringGrants, fmt, todayStr, weekdayKeyOf } from "../lib/leave";
 import { getLeaveRecords, addLeaveRecord, getPlannedLeaves, deleteLeaveRecord } from "../data";
+import { changePassword } from "../firebase";
 import Toast from "./Toast";
 import { S } from "../styles";
 
@@ -203,8 +204,69 @@ export default function StaffView({ me }) {
         <p style={S.noteSmall}>取得日が来る前の通常取得は、自分で取り消せます。過ぎた記録や計画年休は院長が修正します。</p>
       </section>
 
+      <PasswordCard showToast={showToast} />
+
       <Toast toast={toast} onClose={() => setToast(null)} />
     </>
+  );
+}
+
+/* 本人によるパスワード変更 */
+function PasswordCard({ showToast }) {
+  const [open, setOpen] = useState(false);
+  const [cur, setCur] = useState("");
+  const [next, setNext] = useState("");
+  const [next2, setNext2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit() {
+    setError("");
+    if ((next || "").length < 6) { setError("新しいパスワードは6文字以上にしてください。"); return; }
+    if (next !== next2) { setError("新しいパスワード（確認）が一致しません。"); return; }
+    setBusy(true);
+    try {
+      await changePassword(cur, next);
+      setCur(""); setNext(""); setNext2(""); setOpen(false);
+      showToast("✓ パスワードを変更しました");
+    } catch (e) {
+      console.error(e);
+      if (e.code === "auth/wrong-password" || e.code === "auth/invalid-credential") {
+        setError("現在のパスワードが違います。");
+      } else if (e.code === "auth/weak-password") {
+        setError("そのパスワードは使えません。6文字以上にしてください。");
+      } else {
+        setError("変更に失敗しました。通信状態を確認してください。");
+      }
+    }
+    setBusy(false);
+  }
+
+  return (
+    <section style={S.card}>
+      <div style={S.notifHead}>
+        <h2 style={S.cardTitle}>🔑 パスワード変更</h2>
+        {!open && <button style={S.btnGhost} onClick={() => setOpen(true)}>変更する</button>}
+      </div>
+      {open && (
+        <>
+          <label style={S.fieldLabel}>現在のパスワード</label>
+          <input type="password" value={cur} onChange={(e) => setCur(e.target.value)} style={S.input} autoComplete="current-password" />
+          <label style={S.fieldLabel}>新しいパスワード（6文字以上・自分の好きなもの）</label>
+          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} style={S.input} autoComplete="new-password" />
+          <label style={S.fieldLabel}>新しいパスワード（確認）</label>
+          <input type="password" value={next2} onChange={(e) => setNext2(e.target.value)} style={S.input} autoComplete="new-password" />
+          {error && <div style={S.errorBox}>{error}</div>}
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button onClick={submit} style={{ ...S.btnPrimary, marginTop: 0, opacity: busy ? 0.6 : 1 }} disabled={busy}>
+              {busy ? "変更中…" : "変更する"}
+            </button>
+            <button onClick={() => { setOpen(false); setError(""); }} style={{ ...S.btnGhost, padding: "12px 20px" }}>キャンセル</button>
+          </div>
+        </>
+      )}
+      {!open && <p style={S.noteSmall}>初期パスワードから自分の好きなパスワードに変更できます。忘れた場合は院長に伝えてください（再発行できます）。</p>}
+    </section>
   );
 }
 

@@ -7,8 +7,14 @@
 - ログイン必須。role: "owner"（院長）と "staff" で画面が分かれる。
 - 構成: src/App.jsx（認証分岐のみ）、components/（Login / OwnerView / OwnerHome / StaffView / StaffManager / PrintLedger / Toast）、lib/leave.js（計算ロジック）、data.js（Firestore操作）、styles.js（Sオブジェクト+globalCss。CSSファイルは無くinline style中心）。
 
+## 認証方式（重要）
+- スタッフのログインは「ログインID + パスワード」。内部では loginIdToEmail() で `{id}@staff.yukyu-kanri.local` の疑似メールに変換してFirebase Authを使う。@を含む入力はそのままメール扱い（院長の既存ログイン用）。
+- スタッフ登録は院長がアプリ内で完結: createStaffAccount() がsecondary接続でAuthユーザーを作成（院長のセッションは維持される）→ upsertStaff。
+- パスワードは本人が changePassword() で変更可（再認証つき）。
+- パスワードを忘れた場合: 疑似メールなので再設定メールは使えない → 院長がFirebaseコンソールで旧ユーザー削除 → スタッフ管理の「アカウント再発行」→ migrateStaffData() で記録を新UIDへ自動引き継ぎ。
+
 ## データ構造（Firestore）
-- `staff/{uid}`: { name, role, joinDate "YYYY-MM-DD", workDaysPerWeek, dailyMinutes, minutesPerDay: {sun..sat: 分} }
+- `staff/{uid}`: { name, role, loginId, joinDate "YYYY-MM-DD", workDaysPerWeek, dailyMinutes, minutesPerDay: {sun..sat: 分} }
 - `staff/{uid}/leaveRecords/{id}`: { date, minutes, type: "normal"|"planned", memo, plannedId?, createdAt }
 - `notifications/{id}`: { staffUid, staffName, action, date, minutes, read, createdAt }
 - `plannedLeaves/{id}`: { date, memo, status: "pending"|"applied", createdAt }（計画年休の予約。到来分は起動時に applyDuePlannedLeaves で全スタッフの記録へ自動反映）

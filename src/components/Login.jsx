@@ -3,10 +3,10 @@ import { login, resetPassword } from "../firebase";
 import { S, globalCss } from "../styles";
 
 const ERROR_MESSAGES = {
-  "auth/invalid-email": "メールアドレスの形式が正しくありません。",
-  "auth/user-not-found": "このメールアドレスは登録されていません。",
+  "auth/invalid-email": "ログインIDの形式が正しくありません（半角英数字）。",
+  "auth/user-not-found": "このログインIDは登録されていません。",
   "auth/wrong-password": "パスワードが違います。",
-  "auth/invalid-credential": "メールアドレスまたはパスワードが違います。",
+  "auth/invalid-credential": "ログインIDまたはパスワードが違います。",
   "auth/too-many-requests": "試行回数が多すぎます。しばらく待って再度お試しください。",
 };
 
@@ -21,7 +21,7 @@ export default function Login() {
     setError("");
     setResetMsg("");
     if (!email || !password) {
-      setError("メールアドレスとパスワードを入力してください。");
+      setError("ログインIDとパスワードを入力してください。");
       return;
     }
     setBusy(true);
@@ -37,8 +37,8 @@ export default function Login() {
   async function handleReset() {
     setError("");
     setResetMsg("");
-    if (!email) {
-      setError("パスワードを再設定するには、まずメールアドレスを入力してください。");
+    if (!email.includes("@")) {
+      setError("パスワードを忘れた場合は院長に伝えてください（アカウントを再発行します）。");
       return;
     }
     try {
@@ -61,15 +61,16 @@ export default function Login() {
         <div style={S.loginEyebrow}>すこやか歯科医院</div>
         <h1 style={S.loginTitle}>有給管理 ログイン</h1>
 
-        <label style={S.fieldLabel}>メールアドレス</label>
+        <label style={S.fieldLabel}>ログインID</label>
         <input
-          type="email"
+          type="text"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           onKeyDown={onKeyDown}
           style={S.input}
-          placeholder="you@example.com"
+          placeholder="例: hanako"
           autoComplete="username"
+          autoCapitalize="none"
         />
 
         <label style={S.fieldLabel}>パスワード</label>
