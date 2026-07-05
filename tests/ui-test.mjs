@@ -317,6 +317,18 @@ try {
   console.log("Account created via stub:", createdOk);
   console.log("Staff doc saved with loginId:", staffAdded);
 
+  /* 手順書モーダル */
+  console.log("=== OWNER: REISSUE GUIDE ===");
+  click(byText(rootEl, "button", "📖 再発行の手順書"));
+  await wait(300);
+  html = rootEl.innerHTML;
+  console.log("Guide opens:", html.includes("アカウント再発行の手順書"));
+  console.log("Guide has console steps:", html.includes("console.firebase.google.com") && html.includes("Authentication"));
+  console.log("Guide has 6 steps:", html.includes("本人に伝える"));
+  click(byText(rootEl, "button", "閉じる"));
+  await wait(200);
+  console.log("Guide closes:", !rootEl.innerHTML.includes("アカウント再発行の手順書"));
+
   /* ========== ログイン画面(未ログイン時) ========== */
   console.log("=== LOGIN SCREEN ===");
   globalThis.__AUTH_UID = null;
