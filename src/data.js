@@ -38,7 +38,7 @@ export async function getLeaveRecords(uid) {
 }
 
 export async function addLeaveRecord(uid, staffName, rec, notify = true) {
-  await addDoc(collection(db, "staff", uid, "leaveRecords"), {
+  const ref = await addDoc(collection(db, "staff", uid, "leaveRecords"), {
     ...rec,
     createdAt: serverTimestamp(),
   });
@@ -53,6 +53,7 @@ export async function addLeaveRecord(uid, staffName, rec, notify = true) {
       createdAt: serverTimestamp(),
     });
   }
+  return ref.id;
 }
 
 async function hasPlannedRecord(uid, plannedId) {
@@ -103,12 +104,13 @@ export async function getPlannedLeaves() {
 }
 
 export async function addPlannedLeave(dateStr, memo) {
-  await addDoc(collection(db, "plannedLeaves"), {
+  const ref = await addDoc(collection(db, "plannedLeaves"), {
     date: dateStr,
     memo: memo || "",
     status: "pending",
     createdAt: serverTimestamp(),
   });
+  return ref.id;
 }
 
 export async function deletePlannedLeave(id) {

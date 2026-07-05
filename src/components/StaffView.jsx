@@ -1,12 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { calcBalance, nextGrant, calcUpcomingPlanned, fmt, todayStr, weekdayKeyOf } from "../lib/leave";
+import { calcBalance, nextGrant, calcUpcomingPlanned, fiveDayProgress, expiringGrants, fmt, todayStr, weekdayKeyOf } from "../lib/leave";
 import { getLeaveRecords, addLeaveRecord, getPlannedLeaves, deleteLeaveRecord } from "../data";
+import Toast from "./Toast";
 import { S } from "../styles";
 
 export default function StaffView({ me }) {
   const [records, setRecords] = useState([]);
   const [planned, setPlanned] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
+  const toastTimer = React.useRef(null);
+  const showToast = (msg, onUndo) => {
+    clearTimeout(toastTimer.current);
+    setToast({ msg, onUndo });
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  };
 
   async function reload() {
     setLoading(true);
@@ -31,10 +39,16 @@ export default function StaffView({ me }) {
   const upcoming = useMemo(() => calcUpcomingPlanned(me, planned), [me, planned]);
   const daily = bal.daily;
   const forecastMin = bal.remainMin - upcoming.minutes;
+  const five = useMemo(() => fiveDayProgress(me, records), [me, records]);
+  const expiring = useMemo(() => expiringGrants(me, records), [me, records]);
 
   async function handleAdd(rec) {
-    await addLeaveRecord(me.id, me.name, rec);
+    const newId = await addLeaveRecord(me.id, me.name, rec);
     await reload();
+    showToast(`✓ ${fmt(rec.date)} の取得を登録しました`, async () => {
+      await deleteLeaveRecord(me.id, newId);
+      await reload();
+    });
   }
 
   // 本人が取り消せるのは「未来日（取得日が今日より後）の通常取得」だけ
@@ -43,10 +57,14 @@ export default function StaffView({ me }) {
   }
   async function handleCancel(r) {
     if (!canCancel(r)) return;
-    if (!confirm(`${fmt(r.date)} の取得（${r.minutes}分）を取り消しますか？`)) return;
     try {
+      const backup = { date: r.date, minutes: r.minutes, type: r.type, memo: r.memo || "" };
       await deleteLeaveRecord(me.id, r.id);
       await reload();
+      showToast(`🗑 ${fmt(r.date)} の取得を取り消しました`, async () => {
+        await addLeaveRecord(me.id, me.name, backup, false);
+        await reload();
+      });
     } catch (e) {
       console.error(e);
       alert("取り消しに失敗しました。");
@@ -74,6 +92,34 @@ export default function StaffView({ me }) {
                 {(forecastMin / daily).toFixed(1)}日分
               </span>
             </div>
+          </div>
+        )}
+        {five && (
+          <div style={S.forecastBox}>
+            <div style={S.forecastRow}>
+              <span>年5日取得義務（{fmt(five.deadline)}まで）</span>
+              <span style={{ fontWeight: 800 }}>
+                {five.takenDays.toFixed(1)} / 5日
+                {five.need > 0 ? `（あと${five.need.toFixed(1)}日）` : "　達成 ✓"}
+              </span>
+            </div>
+            <div style={{ height: 7, background: "rgba(255,255,255,0.25)", borderRadius: 99, marginTop: 4 }}>
+              <div style={{
+                height: "100%", borderRadius: 99,
+                background: five.status === "danger" ? "#ffb3a5" : "#fff",
+                width: `${Math.min(100, (five.takenDays / 5) * 100)}%`,
+              }} />
+            </div>
+          </div>
+        )}
+        {expiring.length > 0 && (
+          <div style={{ ...S.forecastBox, background: "rgba(255,210,200,0.25)" }}>
+            {expiring.map((e, i) => (
+              <div key={i} style={S.forecastRow}>
+                <span>⏳ 使わないと消えてしまう分</span>
+                <span style={{ fontWeight: 800 }}>{e.remainDays.toFixed(1)}日分（{fmt(e.expireDate)}に時効）</span>
+              </div>
+            ))}
           </div>
         )}
         <div style={S.heroMeta}>
@@ -109,7 +155,7 @@ export default function StaffView({ me }) {
       )}
 
       <div className="grid2" style={S.grid2}>
-        <AddRecordCard staff={me} onAdd={handleAdd} />
+        <AddRecordCard staff={me} onAdd={handleAdd} records={records} />
         <GrantsCard bal={bal} />
       </div>
 
@@ -156,11 +202,70 @@ export default function StaffView({ me }) {
         )}
         <p style={S.noteSmall}>取得日が来る前の通常取得は、自分で取り消せます。過ぎた記録や計画年休は院長が修正します。</p>
       </section>
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </>
   );
 }
 
-function AddRecordCard({ staff, onAdd }) {
+/* 日タップで取得日を選ぶミニカレンダー */
+function MiniPickCal({ value, onPick, records }) {
+  const init = value ? new Date(value + "T00:00:00") : new Date();
+  const [ym, setYm] = useState({ y: init.getFullYear(), m: init.getMonth() + 1 });
+  const WD = ["日", "月", "火", "水", "木", "金", "土"];
+  const move = (d) => setYm(({ y, m }) => {
+    let nm = m + d, ny = y;
+    if (nm < 1) { nm = 12; ny--; }
+    if (nm > 12) { nm = 1; ny++; }
+    return { y: ny, m: nm };
+  });
+  const dim = new Date(ym.y, ym.m, 0).getDate();
+  const first = new Date(ym.y, ym.m - 1, 1).getDay();
+  const cells = [];
+  for (let i = 0; i < first; i++) cells.push(null);
+  for (let d = 1; d <= dim; d++) cells.push(d);
+  const today = todayStr();
+  const mine = new Set((records || []).map((r) => r.date));
+  return (
+    <div style={{ border: "1px solid #e2ded5", borderRadius: 12, padding: "10px 12px", marginBottom: 10, background: "#fcfbf9" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
+        <button type="button" style={S.btnGhost} onClick={() => move(-1)}>◀</button>
+        <span style={{ flex: 1, textAlign: "center", fontWeight: 800, fontSize: 14 }}>{ym.y}年 {ym.m}月</span>
+        <button type="button" style={S.btnGhost} onClick={() => move(1)}>▶</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3 }}>
+        {WD.map((w, i) => (
+          <div key={"h" + i} style={{ textAlign: "center", fontSize: 10.5, fontWeight: 800, color: i === 0 ? "#b4341f" : i === 6 ? "#2a6fb0" : "#8a857a" }}>{w}</div>
+        ))}
+        {cells.map((d, i) => {
+          if (d == null) return <div key={i} />;
+          const ds = `${ym.y}-${String(ym.m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+          const sel = ds === value;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onPick(ds)}
+              style={{
+                padding: "7px 0", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                border: sel ? "2px solid #3a7d6e" : "1px solid transparent",
+                background: sel ? "#e3efea" : ds === today ? "#f1ede3" : "transparent",
+                color: mine.has(ds) ? "#3a7d6e" : "#1f2421",
+                position: "relative",
+              }}
+            >
+              {d}
+              {mine.has(ds) && <span style={{ position: "absolute", bottom: 1, left: "50%", transform: "translateX(-50%)", fontSize: 7, color: "#3a7d6e" }}>●</span>}
+            </button>
+          );
+        })}
+      </div>
+      <p style={{ ...S.noteSmall, margin: "6px 0 0" }}>日をタップで取得日に設定。●＝登録済みの日。</p>
+    </div>
+  );
+}
+
+function AddRecordCard({ staff, onAdd, records }) {
   const [date, setDate] = useState(todayStr());
   const [minutes, setMinutes] = useState("");
   const [memo, setMemo] = useState("");
@@ -197,7 +302,8 @@ function AddRecordCard({ staff, onAdd }) {
   return (
     <section style={S.card}>
       <h2 style={S.cardTitle}>取得を登録</h2>
-      <label style={S.fieldLabel}>取得日</label>
+      <label style={S.fieldLabel}>取得日（カレンダーの日をタップ）</label>
+      <MiniPickCal value={date} onPick={setDate} records={records} />
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={S.input} />
 
       <label style={S.fieldLabel}>
@@ -217,6 +323,7 @@ function AddRecordCard({ staff, onAdd }) {
       </div>
       <input
         type="number"
+        inputMode="numeric"
         placeholder={`分を入力（空欄なら${suggested}分）`}
         value={minutes}
         onChange={(e) => setMinutes(e.target.value)}

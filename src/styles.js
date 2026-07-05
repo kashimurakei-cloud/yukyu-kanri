@@ -73,10 +73,19 @@ export const S = {
   tagActive: { background: accentSoft, color: accent, padding: "2px 8px", borderRadius: 20, fontSize: 11.5, fontWeight: 600 },
   tagExpired: { background: "#f0eeea", color: "#a09a8e", padding: "2px 8px", borderRadius: 20, fontSize: 11.5, fontWeight: 600 },
 
-  tabBar: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" },
-  tab: { padding: "9px 16px", borderRadius: 10, border: `1px solid ${line}`, background: "#fff", fontSize: 14, cursor: "pointer", fontFamily: "inherit", color: "#6a665e" },
-  tabActive: { padding: "9px 16px", borderRadius: 10, border: `1px solid ${accent}`, background: accent, color: "#fff", fontSize: 14, cursor: "pointer", fontFamily: "inherit", fontWeight: 700 },
-  badge: { marginLeft: 6, background: "#fff", color: accent, borderRadius: 20, padding: "0 7px", fontSize: 11, fontWeight: 700 },
+  tabBar: { display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap", alignItems: "center" },
+  tab: {
+    padding: "9px 15px", borderRadius: 999, border: "1px solid transparent",
+    background: "transparent", fontSize: 13.5, cursor: "pointer", fontFamily: "inherit",
+    color: "#6a665e", fontWeight: 600,
+  },
+  tabActive: {
+    padding: "9px 15px", borderRadius: 999, border: `1px solid ${accent}`,
+    background: accent, color: "#fff", fontSize: 13.5, cursor: "pointer",
+    fontFamily: "inherit", fontWeight: 800,
+    boxShadow: "0 3px 10px rgba(58,125,110,0.3)",
+  },
+  badge: { marginLeft: 6, background: "#e5484d", color: "#fff", borderRadius: 20, padding: "1px 7px", fontSize: 11, fontWeight: 800 },
 
   quickRow: { display: "flex", gap: 8, margin: "0 0 8px", flexWrap: "wrap" },
   quickBtn: { flex: 1, padding: "8px", borderRadius: 9, border: `1px solid ${line}`, background: accentSoft, color: accent, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
@@ -117,10 +126,56 @@ export const S = {
 export const globalCss = `
   @import url('https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap');
   * { box-sizing: border-box; }
-  body { margin: 0; }
+  body { margin: 0; -webkit-font-smoothing: antialiased; }
   button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid ${accent}; outline-offset: 2px; }
+  button { -webkit-tap-highlight-color: transparent; }
   @media (max-width: 640px) {
     .grid2 { grid-template-columns: 1fr !important; }
     .histSummary { grid-template-columns: 1fr 1fr !important; }
+  }
+
+  /* ===== 年次有給休暇管理簿の印刷 ===== */
+  .yk-print { display: none; }
+  @media print {
+    @page { size: A4 portrait; margin: 12mm; }
+    body { background: #fff !important; }
+    body > *:not(.yk-print) { display: none !important; }
+    .yk-print {
+      display: block; width: 100%;
+      -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+      font-family: 'Zen Kaku Gothic New', sans-serif; color: #000;
+    }
+    .yk-print-page { page-break-after: always; }
+    .yk-print-page:last-child { page-break-after: auto; }
+    .yk-print-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      border-bottom: 2px solid #157F71; padding-bottom: 2mm; margin-bottom: 4mm;
+    }
+    .yk-print-title { font-size: 17px; font-weight: 900; letter-spacing: 1px; }
+    .yk-print-date { font-size: 10px; color: #444; }
+    .yk-print-meta { width: 100%; border-collapse: collapse; margin-bottom: 4mm; }
+    .yk-print-meta th {
+      background: #eef5f3; font-size: 9.5px; font-weight: 700; text-align: left;
+      padding: 1.6mm 2mm; border: 0.5px solid #b9cdc8; width: 16mm; white-space: nowrap;
+    }
+    .yk-print-meta td { font-size: 10.5px; padding: 1.6mm 2mm; border: 0.5px solid #b9cdc8; }
+    .yk-print-meta td.yk-name { font-size: 13px; font-weight: 800; }
+    .yk-print-table { width: 100%; border-collapse: collapse; }
+    .yk-print-table th {
+      background: #157F71; color: #fff; font-size: 9.5px; font-weight: 700;
+      padding: 1.6mm 2mm; text-align: left;
+    }
+    .yk-print-table td { font-size: 10px; padding: 1.4mm 2mm; border-bottom: 0.5px solid #ccc; }
+    .yk-print-table .c-no { width: 7mm; text-align: center; color: #888; }
+    .yk-print-table .c-r, .yk-print-table th.c-r { text-align: right; }
+    .yk-print-table .c-empty { color: #999; text-align: center; padding: 4mm; }
+    .yk-print-sum { width: 100%; border-collapse: collapse; margin-top: 4mm; }
+    .yk-print-sum th {
+      background: #eef5f3; font-size: 9.5px; font-weight: 700; text-align: left;
+      padding: 1.8mm 2mm; border: 0.5px solid #b9cdc8; white-space: nowrap;
+    }
+    .yk-print-sum td { font-size: 10.5px; padding: 1.8mm 2mm; border: 0.5px solid #b9cdc8; }
+    .yk-print-sum td.yk-strong { font-weight: 900; font-size: 12px; }
+    .yk-print-note { font-size: 8.5px; color: #666; margin-top: 3mm; }
   }
 `;

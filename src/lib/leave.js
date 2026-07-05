@@ -113,3 +113,52 @@ export function calcUpcomingPlanned(staff, plannedLeaves, asOf = todayStr()) {
   }
   return { minutes, days: minutes / daily, items, horizon };
 }
+
+/* ---------- ② 年5日取得義務の進捗 ----------
+   直近の基準日(付与日)から1年間で5日取得が義務(10日以上付与の職員)。
+   計画年休も取得日数に数える。 */
+export function fiveDayProgress(staff, records, asOf = todayStr()) {
+  const grants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf);
+  if (grants.length === 0) return null;
+  const g = grants[grants.length - 1]; // 直近の基準日
+  if (g.days < 10) return null; // 義務の対象外
+  const daily = staff.dailyMinutes || 480;
+  const start = g.grantDate;
+  const deadline = addMonths(start, 12);
+  const takenMin = (records || [])
+    .filter((r) => r.date >= start && r.date < deadline)
+    .reduce((s, r) => s + Number(r.minutes || 0), 0);
+  const takenDays = takenMin / daily;
+  const need = Math.max(0, 5 - takenDays);
+  const daysLeft = Math.max(0, Math.round((new Date(deadline + "T00:00:00") - new Date(asOf + "T00:00:00")) / 86400000));
+  let status = "done"; // 達成
+  if (need > 0) {
+    const elapsedRatio = Math.min(1, Math.max(0, 1 - daysLeft / 365));
+    if (daysLeft <= 90) status = "danger";       // 期限3ヶ月切りで未達
+    else if (takenDays + 0.5 < 5 * elapsedRatio) status = "warn"; // ペース遅れ
+    else status = "ontrack";
+  }
+  return { start, deadline, takenDays, need, daysLeft, status };
+}
+
+/* ---------- ③ 時効消滅の事前警告 ----------
+   古い付与から順に消化した(FIFO)と仮定し、残った分の失効予定を出す。 */
+export function expiringGrants(staff, records, asOf = todayStr(), withinDays = 90) {
+  const daily = staff.dailyMinutes || 480;
+  const grants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf)
+    .map((g) => ({ ...g, minutes: g.days * daily, expire: addMonths(g.grantDate, 24) }));
+  let pool = (records || []).reduce((s, r) => s + Number(r.minutes || 0), 0);
+  const out = [];
+  for (const g of grants) {
+    const consumed = Math.min(pool, g.minutes);
+    pool -= consumed;
+    const left = g.minutes - consumed;
+    if (left > 0 && g.expire > asOf) {
+      const inDays = Math.round((new Date(g.expire + "T00:00:00") - new Date(asOf + "T00:00:00")) / 86400000);
+      if (inDays <= withinDays) {
+        out.push({ expireDate: g.expire, remainMin: left, remainDays: left / daily, inDays });
+      }
+    }
+  }
+  return out;
+}

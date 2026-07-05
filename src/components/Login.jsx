@@ -50,6 +50,7 @@ export default function Login() {
   }
 
   function onKeyDown(e) {
+    if (e.nativeEvent.isComposing) return; // 日本語変換中のEnterは無視
     if (e.key === "Enter") handleLogin();
   }
 

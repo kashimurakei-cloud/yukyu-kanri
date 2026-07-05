@@ -14,10 +14,22 @@ import {
   addLeaveRecord,
 } from "../data";
 import StaffManager from "./StaffManager";
+import OwnerHome, { LeaveCalendar, analyzeAll } from "./OwnerHome";
+import PrintLedger from "./PrintLedger";
+import Toast from "./Toast";
+import { fiveDayProgress, expiringGrants } from "../lib/leave";
 import { S } from "../styles";
 
 export default function OwnerView({ me }) {
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("home");
+  const [toast, setToast] = useState(null);
+  const toastTimer = React.useRef(null);
+  const showToast = (msg, onUndo) => {
+    clearTimeout(toastTimer.current);
+    setToast({ msg, onUndo });
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  };
+  const [focusStaffId, setFocusStaffId] = useState(null);
   const [staffList, setStaffList] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [plannedLeaves, setPlannedLeaves] = useState([]);
@@ -73,18 +85,43 @@ export default function OwnerView({ me }) {
   return (
     <>
       <div style={S.tabBar}>
-        <button style={tab === "overview" ? S.tabActive : S.tab} onClick={() => setTab("overview")}>全員の状況</button>
+        <button style={tab === "home" ? S.tabActive : S.tab} onClick={() => setTab("home")}>🏠 ホーム</button>
+        <button style={tab === "overview" ? S.tabActive : S.tab} onClick={() => setTab("overview")}>職員</button>
+        <button style={tab === "cal" ? S.tabActive : S.tab} onClick={() => setTab("cal")}>カレンダー</button>
         <button style={tab === "planned" ? S.tabActive : S.tab} onClick={() => setTab("planned")}>計画年休</button>
         <button style={tab === "notif" ? S.tabActive : S.tab} onClick={() => setTab("notif")}>
           通知{unreadCount > 0 && <span style={S.badge}>{unreadCount}</span>}
         </button>
         <button style={tab === "manage" ? S.tabActive : S.tab} onClick={() => setTab("manage")}>スタッフ管理</button>
+        <button style={{ ...S.tab, marginLeft: "auto" }} onClick={() => window.print()}>🖨 管理簿</button>
       </div>
 
       {loading && <p style={S.empty}>読み込み中…</p>}
 
+      {!loading && tab === "home" && (
+        <OwnerHome
+          staffList={staffList}
+          recordsByStaff={recordsByStaff}
+          pendingPlanned={pendingPlanned}
+          onOpenStaff={(uid) => { setFocusStaffId(uid); setTab("overview"); }}
+          onGoTab={setTab}
+        />
+      )}
+
+      {!loading && tab === "cal" && (
+        <LeaveCalendar staffList={staffList} recordsByStaff={recordsByStaff} pendingPlanned={pendingPlanned} />
+      )}
+
       {!loading && tab === "overview" && (
-        <OverviewTab staffList={staffList} recordsByStaff={recordsByStaff} pendingPlanned={pendingPlanned} onChanged={reload} />
+        <OverviewTab
+          staffList={staffList}
+          recordsByStaff={recordsByStaff}
+          pendingPlanned={pendingPlanned}
+          onChanged={reload}
+          showToast={showToast}
+          focusStaffId={focusStaffId}
+          onFocusDone={() => setFocusStaffId(null)}
+        />
       )}
 
       {!loading && tab === "planned" && (
@@ -104,17 +141,96 @@ export default function OwnerView({ me }) {
       {!loading && tab === "manage" && (
         <StaffManager staffList={staffList} onChanged={reload} />
       )}
+
+      <PrintLedger staffList={staffList} recordsByStaff={recordsByStaff} />
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </>
   );
 }
 
-/* ------- 全員の状況 ------- */
-function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged }) {
+/* ------- 職員(カードUI) ------- */
+function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, showToast, focusStaffId, onFocusDone }) {
   const [selectedId, setSelectedId] = useState(null);
   const selected = staffList.find((s) => s.id === selectedId);
+  const rows = analyzeAll(staffList, recordsByStaff, pendingPlanned);
+
+  // ホームの要対応から飛んできたら該当職員を開く
+  useEffect(() => {
+    if (focusStaffId) {
+      setSelectedId(focusStaffId);
+      onFocusDone?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusStaffId]);
 
   return (
     <>
+      <section style={{ marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
+          {rows.map(({ s, bal, ng, forecast, five, expiring }) => {
+            const remainDays = bal.remainMin / bal.daily;
+            const low = forecast < 0;
+            const warn5 = forecast >= 0 && forecast < bal.daily * 5;
+            const fiveColor = !five ? null
+              : five.status === "done" ? "#2f7d4f"
+              : five.status === "danger" ? "#b4341f"
+              : five.status === "warn" ? "#b07a1f" : "#3a7d6e";
+            return (
+              <button
+                key={s.id}
+                onClick={() => setSelectedId(s.id === selectedId ? null : s.id)}
+                style={{
+                  textAlign: "left", background: "#fff", cursor: "pointer",
+                  border: s.id === selectedId ? "2px solid #3a7d6e" : "1px solid #e2ded5",
+                  borderRadius: 16, padding: "16px 18px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <span style={{ fontSize: 16, fontWeight: 800 }}>{s.name}</span>
+                  <span style={{ fontSize: 11.5, color: "#8a857a" }}>週{s.workDaysPerWeek}日</span>
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 800, margin: "6px 0 2px" }}>
+                  {remainDays.toFixed(1)}<span style={{ fontSize: 13 }}>日分</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#8a857a", marginLeft: 8 }}>残</span>
+                </div>
+                {five && (
+                  <div style={{ margin: "8px 0 2px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700, color: fiveColor }}>
+                      <span>年5日義務 {five.takenDays.toFixed(1)}/5日</span>
+                      <span>
+                        {five.status === "done" ? "達成 ✓"
+                          : five.status === "danger" ? `⚠ 期限まで${five.daysLeft}日`
+                          : five.status === "warn" ? "ペース遅れ" : "順調"}
+                      </span>
+                    </div>
+                    <div style={{ height: 6, background: "#eee9df", borderRadius: 99, marginTop: 3 }}>
+                      <div style={{
+                        height: "100%", borderRadius: 99, background: fiveColor,
+                        width: `${Math.min(100, (five.takenDays / 5) * 100)}%`,
+                      }} />
+                    </div>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 8 }}>
+                  {low && <span style={S.warnTag}>残不足見込み</span>}
+                  {warn5 && <span style={S.cautionTag}>5日割れ見込み</span>}
+                  {expiring.map((e, i) => (
+                    <span key={i} style={S.cautionTag}>⏳{e.remainDays.toFixed(1)}日分 {fmt(e.expireDate)}消滅</span>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11.5, color: "#8a857a", marginTop: 8 }}>
+                  次回付与 {ng ? `${fmt(ng.grantDate)}（${ng.days}日）` : "—"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {staffList.length === 0 && (
+          <p style={S.empty}>まだスタッフが登録されていません。「スタッフ管理」から追加してください。</p>
+        )}
+      </section>
+
+      {false && (
       <section style={S.card}>
         <h2 style={S.cardTitle}>全スタッフの有給状況</h2>
         {staffList.length === 0 ? (
@@ -172,6 +288,7 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged }) {
           赤=不足、橙=自由分5日を割り込む可能性。判断の目安です（自動では引きません）。
         </p>
       </section>
+      )}
 
       {selected && (
         <StaffHistoryCard
@@ -179,13 +296,14 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged }) {
           records={recordsByStaff[selected.id] || []}
           onClose={() => setSelectedId(null)}
           onChanged={onChanged}
+          showToast={showToast}
         />
       )}
     </>
   );
 }
 
-function StaffHistoryCard({ staff, records, onClose, onChanged }) {
+function StaffHistoryCard({ staff, records, onClose, onChanged, showToast }) {
   const bal = calcBalance(staff, records);
   const daily = bal.daily;
   const sorted = [...records].sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -194,17 +312,25 @@ function StaffHistoryCard({ staff, records, onClose, onChanged }) {
   const [showProxy, setShowProxy] = useState(false);
 
   async function handleProxyAdd(rec) {
-    await addLeaveRecord(staff.id, staff.name, rec, false); // 代理登録は通知なし
+    const newId = await addLeaveRecord(staff.id, staff.name, rec, false); // 代理登録は通知なし
     setShowProxy(false);
     await onChanged();
+    showToast?.(`✓ ${staff.name}さんの取得（${fmt(rec.date)}）を登録しました`, async () => {
+      await deleteLeaveRecord(staff.id, newId);
+      await onChanged();
+    });
   }
 
   async function handleDelete(r) {
     if (r.type === "planned") return;
-    if (!confirm(`${fmt(r.date)} の取得（${r.minutes}分）を削除しますか？`)) return;
     try {
+      const backup = { date: r.date, minutes: r.minutes, type: r.type, memo: r.memo || "" };
       await deleteLeaveRecord(staff.id, r.id);
       await onChanged();
+      showToast?.(`🗑 ${fmt(r.date)} の取得を削除しました`, async () => {
+        await addLeaveRecord(staff.id, staff.name, backup, false);
+        await onChanged();
+      });
     } catch (e) {
       console.error(e);
       alert("削除に失敗しました。");
