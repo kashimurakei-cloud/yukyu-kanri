@@ -19,6 +19,9 @@
 - `staff/{uid}/leaveRecords/{id}`: { date, minutes, type: "normal"|"planned", memo, plannedId?, createdAt }
 - `notifications/{id}`: { staffUid, staffName, action, date, minutes, read, createdAt }
 - `plannedLeaves/{id}`: { date, memo, status: "pending"|"applied", createdAt }（計画年休の予約。到来分は起動時に applyDuePlannedLeaves で全スタッフの記録へ自動反映）
+  - applyDuePlannedLeavesは冪等: 反映済も毎回チェックし、後から登録/曜日設定したスタッフに追い反映（plannedIdで重複防止・入職前日付はスキップ・退職者除外）。
+  - 反映済の取消は cancelPlannedLeave（全スタッフのplannedId一致記録を削除して残高を戻し、予定も削除）。計画年休タブの「取消して記録も戻す」。
+  - 代理登録で区分=計画年休にした記録は個人だけのもの（plannedIdなし・台帳に載らない）。plannedIdなしの計画年休記録は履歴から編集・削除できる。
 
 ## 計算ロジック（lib/leave.js）— 変更時は特に慎重に
 - GRANT_TABLE: 週所定日数別の比例付与（労基法）。付与は入職6ヶ月後、以後1年ごと。

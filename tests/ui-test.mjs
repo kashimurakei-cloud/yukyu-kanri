@@ -25,7 +25,8 @@ const ROOT = path.join(__dirname, "..");
 
 /* ---------- モックデータ(実行日から相対) ---------- */
 const today = new Date(); today.setHours(0, 0, 0, 0);
-const iso = (d) => d.toISOString().slice(0, 10);
+// ローカル日付でYYYY-MM-DD（toISOStringはUTC変換でJST環境だと1日ずれるため使わない）
+const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const monthsAgo = (n) => { const d = new Date(today); d.setMonth(d.getMonth() - n); return iso(d); };
 const daysFrom = (n) => { const d = new Date(today); d.setDate(d.getDate() + n); return iso(d); };
 
@@ -37,6 +38,13 @@ const staffB = { id: "u-b", name: "鈴木 美咲", role: "staff", joinDate: mont
 const owner = { id: "u-owner", name: "院長", role: "owner", joinDate: "2010-04-01", workDaysPerWeek: 5, dailyMinutes: 480, minutesPerDay: MPD };
 
 const DUP_DAY = daysFrom(12); // AとBが同じ日に休む → カレンダー⚠
+
+// 直近の過去の月曜（Aは月曜勤務480分、Bは月曜休み → 追い反映はAだけに入るはず）
+let PAST_MON = null;
+for (let i = 1; i <= 7; i++) {
+  const d = new Date(today); d.setDate(d.getDate() - i);
+  if (d.getDay() === 1) { PAST_MON = iso(d); break; }
+}
 
 globalThis.__DB = {
   "staff": [owner, staffA, staffB],
@@ -50,7 +58,11 @@ globalThis.__DB = {
     { id: "rb2", date: DUP_DAY, minutes: 420, type: "normal", memo: "通院" },
   ],
   "notifications": [],
-  "plannedLeaves": [{ id: "p1", date: daysFrom(20), memo: "院内研修日", status: "pending" }],
+  "plannedLeaves": [
+    { id: "p1", date: daysFrom(20), memo: "院内研修日", status: "pending" },
+    // 反映済なのに誰にも記録が無い（＝反映後にスタッフ登録された想定）→ 起動時に追い反映されるはず
+    { id: "p2", date: PAST_MON, memo: "追い反映テスト", status: "applied" },
+  ],
 };
 globalThis.__AUTH_UID = "u-owner";
 
@@ -157,6 +169,7 @@ globalThis.document = dom.window.document;
 Object.defineProperty(globalThis, "navigator", { value: dom.window.navigator, configurable: true });
 globalThis.localStorage = dom.window.localStorage;
 globalThis.alert = () => {};
+globalThis.confirm = () => true;
 dom.window.alert = () => {};
 dom.window.confirm = () => true;
 globalThis.__printed = 0;
@@ -198,6 +211,10 @@ try {
   console.log("時効 warning for B:", html.includes("鈴木 美咲") && html.includes("時効消滅"));
   console.log("30日以内の予定 (旅行/通院/研修):", html.includes("これからの取得予定"));
   console.log("Planned in upcoming:", html.includes("計画年休"));
+
+  console.log("=== PLANNED: 追い反映 ===");
+  console.log("反映済でも未反映の人に追い反映:", globalThis.__DB["staff/u-a/leaveRecords"].some((r) => r.plannedId === "p2"));
+  console.log("勤務日でない人には入らない:", !globalThis.__DB["staff/u-b/leaveRecords"].some((r) => r.plannedId === "p2"));
 
   /* 職員カード */
   click(byText(rootEl, "button", "職員"));
@@ -243,6 +260,23 @@ try {
   console.log("Saved indicator (2件目):", rootEl.innerHTML.includes("2件目"));
   console.log("1日休みプリセット:", rootEl.innerHTML.includes("1日休み") && rootEl.innerHTML.includes("半日"));
 
+  /* 個別の計画年休（台帳に載らない・編集削除できる） */
+  console.log("=== OWNER: PROXY個別計画年休 ===");
+  const histSec = () => [...rootEl.querySelectorAll("section")].find((sec) => sec.textContent.includes("申請履歴"));
+  click(byText(histSec(), "button", "計画年休"));
+  await wait(150);
+  console.log("個別計画年休の注意書き:", histSec().innerHTML.includes("この人の記録としてだけ"));
+  setVal([...histSec().querySelectorAll('input[type="date"]')].pop(), "2025-07-01");
+  await wait(150);
+  click(byText(histSec(), "button", "続けて登録する"));
+  await wait(900);
+  const proxyPlanned = globalThis.__DB["staff/u-a/leaveRecords"].find((r) => r.type === "planned" && !r.plannedId && r.date === "2025-07-01");
+  console.log("個別計画年休が登録される:", !!proxyPlanned);
+  const plannedRow = [...rootEl.querySelectorAll("tr")].find((tr) => tr.textContent.includes("計画年休") && tr.textContent.includes("2025/7/1"));
+  console.log("個別計画年休は編集・削除可能:", !!plannedRow && !!byText(plannedRow, "button", "編集") && !!byText(plannedRow, "button", "削除"));
+  const ledgerRow = [...rootEl.querySelectorAll("tr")].find((tr) => tr.textContent.includes(`${Number(PAST_MON.split("-")[1])}/${Number(PAST_MON.split("-")[2])}`) && tr.textContent.includes("計画年休"));
+  console.log("台帳配布の計画年休は編集不可:", !ledgerRow || !byText(ledgerRow, "button", "編集"));
+
   /* 本人画面プレビュー（院長モード・ログアウト不要） */
   console.log("=== OWNER: IMPERSONATION PREVIEW ===");
   click(byText(rootEl, "button", "本人画面を開く"));
@@ -270,6 +304,17 @@ try {
     dupFound = rootEl.innerHTML.includes("⚠");
   }
   console.log("Same-day dup warning ⚠:", dupFound);
+
+  /* 計画年休タブ: 反映済の取消（記録も戻す） */
+  console.log("=== OWNER: PLANNED CANCEL ===");
+  click(byText(rootEl, "button", "計画年休"));
+  await wait(500);
+  html = rootEl.innerHTML;
+  console.log("反映済に取消ボタン:", html.includes("取消して記録も戻す"));
+  click(byText(rootEl, "button", "取消して記録も戻す"));
+  await wait(1000);
+  console.log("記録も戻る:", !globalThis.__DB["staff/u-a/leaveRecords"].some((r) => r.plannedId === "p2"));
+  console.log("台帳から消える:", !globalThis.__DB["plannedLeaves"].some((p) => p.id === "p2"));
 
   /* 管理簿 */
   console.log("=== OWNER: LEDGER ===");
@@ -300,7 +345,8 @@ try {
   click(calBtn);
   await wait(250);
   const dateInput = [...root2.querySelectorAll('input[type="date"]')][0];
-  console.log("Tap sets date:", !!dateInput && dateInput.value.endsWith(calBtn.textContent.trim().padStart(2, "0")));
+  const tappedDay = (calBtn.textContent.match(/\d+/) || [""])[0];
+  console.log("Tap sets date:", !!dateInput && dateInput.value.endsWith(tappedDay.padStart(2, "0")));
 
   /* 登録→トースト→取消 */
   console.log("=== STAFF: ADD + TOAST ===");

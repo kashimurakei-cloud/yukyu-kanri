@@ -8,6 +8,7 @@ import {
   getPlannedLeaves,
   addPlannedLeave,
   deletePlannedLeave,
+  cancelPlannedLeave,
   applyDuePlannedLeaves,
   updateLeaveRecord,
   deleteLeaveRecord,
@@ -85,6 +86,13 @@ export default function OwnerView({ me }) {
     await reload();
   }
 
+  // 反映済の計画年休を取消（各スタッフの記録も削除して残高を戻す）
+  async function handleCancelApplied(id) {
+    const removed = await cancelPlannedLeave(id);
+    await reload();
+    showToast(`✓ 計画年休を取り消しました（${removed}人分の記録を戻しました）`);
+  }
+
   const pendingPlanned = plannedLeaves.filter((p) => p.status !== "applied");
 
   // 本人画面プレビュー（ログアウト不要。入力もできる。通知なし）
@@ -158,6 +166,7 @@ export default function OwnerView({ me }) {
           plannedLeaves={plannedLeaves}
           onAdd={handleAddPlanned}
           onDelete={handleDeletePlanned}
+          onCancelApplied={handleCancelApplied}
           staffList={staffList}
           recordsByStaff={recordsByStaff}
         />
@@ -351,7 +360,8 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
   }
 
   async function handleDelete(r) {
-    if (r.type === "planned") return;
+    // 台帳（計画年休タブ）から配られた記録はここでは消せない。代理で個別に入れた計画年休(plannedIdなし)はOK。
+    if (r.type === "planned" && r.plannedId) return;
     try {
       const backup = { date: r.date, minutes: r.minutes, type: r.type, memo: r.memo || "" };
       await deleteLeaveRecord(staff.id, r.id);
@@ -421,7 +431,7 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
                 </td>
                 <td style={S.tdMemo}>{r.memo || "—"}</td>
                 <td style={S.td}>
-                  {r.type !== "planned" && (
+                  {(r.type !== "planned" || !r.plannedId) && (
                     <span style={{ display: "flex", gap: 6 }}>
                       <button style={S.linkBtn} onClick={() => setEditing(r)}>編集</button>
                       <button style={{ ...S.linkBtn, color: "#b4341f", borderColor: "#e3b5ad" }} onClick={() => handleDelete(r)}>削除</button>
@@ -434,7 +444,8 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
         </table>
       )}
       <p style={S.noteSmall}>
-        通常の取得は編集・削除できます。計画年休の記録は計画年休タブで管理するため、ここでは変更できません。
+        通常の取得と、代理で個別に入れた計画年休は編集・削除できます。
+        計画年休タブから全員に配られた記録はタブ側で管理するため、ここでは変更できません（タブの「取消して記録も戻す」を使ってください）。
       </p>
 
       <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${"#e2ded5"}` }}>
@@ -521,6 +532,12 @@ function ProxyAddForm({ staff, onAdd, onCancel }) {
         <button type="button" style={type === "normal" ? S.quickBtnOn : S.quickBtn} onClick={() => setType("normal")}>通常取得</button>
         <button type="button" style={type === "planned" ? S.quickBtnOn : S.quickBtn} onClick={() => setType("planned")}>計画年休</button>
       </div>
+      {type === "planned" && (
+        <p style={S.noteSmall}>
+          ※ここで入れる計画年休は<strong>この人の記録としてだけ</strong>登録されます（計画年休タブの一覧には載りません）。
+          全員一斉の計画年休は「計画年休」タブから登録してください。
+        </p>
+      )}
 
       <label style={S.fieldLabel}>
         取得量の入力方法
@@ -626,7 +643,7 @@ function Stat({ label, main, sub }) {
 }
 
 /* ------- 計画年休 ------- */
-function PlannedTab({ plannedLeaves, onAdd, onDelete, staffList, recordsByStaff }) {
+function PlannedTab({ plannedLeaves, onAdd, onDelete, onCancelApplied, staffList, recordsByStaff }) {
   const [date, setDate] = useState(todayStr());
   const [memo, setMemo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -732,7 +749,7 @@ function PlannedTab({ plannedLeaves, onAdd, onDelete, staffList, recordsByStaff 
                     </span>
                   </td>
                   <td style={S.td}>
-                    {p.status !== "applied" && (
+                    {p.status !== "applied" ? (
                       <button
                         style={S.linkBtn}
                         onClick={() => {
@@ -740,6 +757,17 @@ function PlannedTab({ plannedLeaves, onAdd, onDelete, staffList, recordsByStaff 
                         }}
                       >
                         取消
+                      </button>
+                    ) : (
+                      <button
+                        style={{ ...S.linkBtn, color: "#b4341f", borderColor: "#e3b5ad" }}
+                        onClick={() => {
+                          if (confirm(
+                            `${fmt(p.date)} の計画年休を取り消しますか？\n各スタッフに反映済みの記録も削除され、その分の残高が戻ります。`
+                          )) onCancelApplied(p.id);
+                        }}
+                      >
+                        取消して記録も戻す
                       </button>
                     )}
                   </td>

@@ -73,11 +73,6 @@ export async function addLeaveRecord(uid, staffName, rec, notify = true) {
   return ref.id;
 }
 
-async function hasPlannedRecord(uid, plannedId) {
-  const snap = await getDocs(collection(db, "staff", uid, "leaveRecords"));
-  return snap.docs.some((d) => d.data().plannedId === plannedId);
-}
-
 // 取得記録の更新（院長が使用）
 export async function updateLeaveRecord(uid, recordId, patch) {
   await updateDoc(doc(db, "staff", uid, "leaveRecords", recordId), patch);
@@ -153,29 +148,61 @@ export async function deletePlannedLeave(id) {
   await deleteDoc(doc(db, "plannedLeaves", id));
 }
 
-// 到来した計画年休（今日以前のpending）を取得記録に反映する。
+// 反映済の計画年休を取消: 各スタッフに配られた記録(plannedId一致)を削除して残高を戻し、予定自体も削除する。
+// 退職者の記録も対象（復帰時に残高が正しくなるように）。
+export async function cancelPlannedLeave(id) {
+  const all = await getAllStaff();
+  const staffOnly = all.filter((s) => s.role === "staff");
+  let removed = 0;
+  for (const s of staffOnly) {
+    const snap = await getDocs(collection(db, "staff", s.id, "leaveRecords"));
+    for (const d of snap.docs) {
+      if (d.data().plannedId === id) {
+        await deleteDoc(doc(db, "staff", s.id, "leaveRecords", d.id));
+        removed++;
+      }
+    }
+  }
+  await deleteDoc(doc(db, "plannedLeaves", id));
+  return removed;
+}
+
+// 到来した計画年休を取得記録に反映する。
+// 「反映済」も毎回チェックする（冪等）: 反映処理の後からスタッフ登録や曜日設定をした場合でも、
+// 次回の起動時に不足分が自動で追い反映される。plannedIdの重複チェックがあるので二重には入らない。
 export async function applyDuePlannedLeaves(allStaff, asOf = todayStr()) {
   const planned = await getPlannedLeaves();
-  const due = planned.filter((p) => p.status !== "applied" && p.date <= asOf);
+  const due = planned.filter((p) => p.date <= asOf);
   const staffOnly = allStaff.filter((s) => s.role === "staff" && s.status !== "retired");
   const appliedSummaries = [];
+  if (due.length === 0) return appliedSummaries;
+
+  // スタッフごとの反映済plannedIdを一括取得（1人1回の読み取りで済ませる）
+  const havePlanned = {};
+  for (const s of staffOnly) {
+    const recs = await getLeaveRecords(s.id);
+    havePlanned[s.id] = new Set(recs.map((r) => r.plannedId).filter(Boolean));
+  }
 
   for (const p of due) {
     for (const s of staffOnly) {
+      if (s.joinDate && p.date < s.joinDate) continue; // 入職前の計画年休は対象外
       const key = weekdayKeyOf(p.date);
       const m = s.minutesPerDay?.[key] ?? 0;
       if (m <= 0) continue;
-      const already = await hasPlannedRecord(s.id, p.id);
-      if (already) continue;
+      if (havePlanned[s.id].has(p.id)) continue;
       await addLeaveRecord(
         s.id,
         s.name,
         { date: p.date, minutes: m, type: "planned", memo: p.memo || "計画年休", plannedId: p.id },
         false
       );
+      havePlanned[s.id].add(p.id);
       appliedSummaries.push({ staffName: s.name, date: p.date, minutes: m });
     }
-    await updateDoc(doc(db, "plannedLeaves", p.id), { status: "applied" });
+    if (p.status !== "applied") {
+      await updateDoc(doc(db, "plannedLeaves", p.id), { status: "applied" });
+    }
   }
 
   if (appliedSummaries.length > 0) {
