@@ -461,10 +461,20 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
 
 // 院長による代理登録フォーム。過去日OK。区分（通常/計画年休）を選べる。
 // 入力は「日数」または「分」のどちらでも。日数→分はその人の1日分で換算。
+// 2025年末までは日単位運用だったため、それ以前の日付では日数モードに自動切替＋注意を出す。
+// （付与も取得も同じ平均分で換算すれば日単位の帳尻が合う。当時の実診療時間で入れるとずれる）
+const MINUTES_ERA_START = "2026-01-01"; // 分単位で取れるようになった日
 function ProxyAddForm({ staff, onAdd, onCancel }) {
   const daily = staff.dailyMinutes || 480;
   const [date, setDate] = useState(todayStr());
   const [mode, setMode] = useState("days"); // "days" or "minutes"
+  const isDayEra = date && date < MINUTES_ERA_START;
+
+  // 2025年以前の日付を選んだら日数モードへ自動切替
+  useEffect(() => {
+    if (isDayEra && mode === "minutes") setMode("days");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
   const [days, setDays] = useState("1");
   const [minutes, setMinutes] = useState(String(daily));
   const [type, setType] = useState("normal");
@@ -499,6 +509,13 @@ function ProxyAddForm({ staff, onAdd, onCancel }) {
       <label style={S.fieldLabel}>取得日（過去の日付もOK）</label>
       <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={S.input} />
 
+      {isDayEra && (
+        <div style={{ ...S.errorBox, background: "#fbf4e3", color: "#7d5a14" }}>
+          📅 2025年までの取得は<strong>日数で入力</strong>してください（1日＝平均{daily}分で換算されます）。
+          当時の実際の診療時間（510分など）では入れないでください。付与と同じ換算にすることで日単位の帳尻が正しく合います。
+        </div>
+      )}
+
       <label style={S.fieldLabel}>区分</label>
       <div style={S.quickRow}>
         <button type="button" style={type === "normal" ? S.quickBtnOn : S.quickBtn} onClick={() => setType("normal")}>通常取得</button>
@@ -524,7 +541,14 @@ function ProxyAddForm({ staff, onAdd, onCancel }) {
         >
           半日（{daily / 2}分）
         </button>
-        <button type="button" style={mode === "minutes" ? S.quickBtnOn : S.quickBtn} onClick={() => setMode("minutes")}>分で入力</button>
+        <button
+          type="button"
+          style={{ ...(mode === "minutes" ? S.quickBtnOn : S.quickBtn), opacity: isDayEra ? 0.4 : 1 }}
+          onClick={() => setMode("minutes")}
+          disabled={isDayEra}
+        >
+          分で入力{isDayEra ? "（2026年〜）" : ""}
+        </button>
       </div>
 
       {mode === "days" ? (
