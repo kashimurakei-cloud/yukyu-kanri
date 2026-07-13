@@ -5,7 +5,9 @@ import { changePassword } from "../firebase";
 import Toast from "./Toast";
 import { S } from "../styles";
 
-export default function StaffView({ me }) {
+// impersonated=true のとき: 院長がログアウトせずに本人画面をプレビュー・代理入力するモード。
+// 通知は送らず、パスワード変更カードは表示しない（院長自身のパスワードが変わってしまうため）。
+export default function StaffView({ me, impersonated = false }) {
   const [records, setRecords] = useState([]);
   const [planned, setPlanned] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,7 @@ export default function StaffView({ me }) {
   const expiring = useMemo(() => expiringGrants(me, records), [me, records]);
 
   async function handleAdd(rec) {
-    const newId = await addLeaveRecord(me.id, me.name, rec);
+    const newId = await addLeaveRecord(me.id, me.name, rec, !impersonated);
     await reload();
     showToast(`✓ ${fmt(rec.date)} の取得を登録しました`, async () => {
       await deleteLeaveRecord(me.id, newId);
@@ -204,7 +206,7 @@ export default function StaffView({ me }) {
         <p style={S.noteSmall}>取得日が来る前の通常取得は、自分で取り消せます。過ぎた記録や計画年休は院長が修正します。</p>
       </section>
 
-      <PasswordCard showToast={showToast} />
+      {!impersonated && <PasswordCard showToast={showToast} />}
 
       <Toast toast={toast} onClose={() => setToast(null)} />
     </>

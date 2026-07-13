@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { upsertStaff, migrateStaffData } from "../data";
+import { upsertStaff, migrateStaffData, retireStaff, unretireStaff, deleteStaffCompletely } from "../data";
 import { createStaffAccount } from "../firebase";
-import { WEEKDAYS } from "../lib/leave";
+import { WEEKDAYS, todayStr, fmt } from "../lib/leave";
 import { S } from "../styles";
 
 /*
@@ -11,10 +11,37 @@ import { S } from "../styles";
   パスワードを忘れたスタッフには「アカウント再発行」：
   院長がFirebaseコンソールで旧ユーザーを削除 → ここで新しい初期パスワードで再発行 → 記録は自動引き継ぎ。
 */
-export default function StaffManager({ staffList, onChanged }) {
+export default function StaffManager({ staffList, retiredList = [], onChanged }) {
   const [editing, setEditing] = useState(null); // 編集中のスタッフ or null
   const [creating, setCreating] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+
+  async function handleUnretire(s) {
+    if (!window.confirm(`${s.name} さんを在籍に戻しますか?`)) return;
+    await unretireStaff(s.id);
+    onChanged();
+  }
+
+  async function handleDelete(s) {
+    if (!window.confirm(
+      `${s.name} さんを完全に削除します。\n取得記録もすべて消え、元に戻せません。\n（退職しただけなら「退職にする」を使ってください）\n\n本当に削除しますか?`
+    )) return false;
+    if (!window.confirm(`最終確認: ${s.name} さんのデータを完全削除します。よろしいですか?`)) return false;
+    try {
+      await deleteStaffCompletely(s.id);
+      onChanged();
+      if (s.loginId) {
+        alert(
+          `削除しました。\nログインアカウントを消すには、Firebaseコンソール（Authentication）で\n「${s.loginId}@staff.yukyu-kanri.local」も削除してください（手順書の④と同じ操作）。`
+        );
+      }
+      return true;
+    } catch (e) {
+      console.error(e);
+      alert("削除に失敗しました。");
+      return false;
+    }
+  }
 
   return (
     <>
@@ -59,12 +86,52 @@ export default function StaffManager({ staffList, onChanged }) {
         )}
       </section>
 
+      {retiredList.length > 0 && (
+        <section style={{ ...S.card, opacity: 0.92 }}>
+          <h2 style={S.cardTitle}>🗄 退職者（記録は保存されています）</h2>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                <th style={S.th}>氏名</th>
+                <th style={S.th}>入職日</th>
+                <th style={S.th}>退職日</th>
+                <th style={S.th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {retiredList.map((s) => (
+                <tr key={s.id}>
+                  <td style={S.tdBold}>{s.name}</td>
+                  <td style={S.td}>{fmt(s.joinDate)}</td>
+                  <td style={S.td}>{fmt(s.retiredDate)}</td>
+                  <td style={S.td}>
+                    <span style={{ display: "flex", gap: 6 }}>
+                      <button style={S.linkBtn} onClick={() => handleUnretire(s)}>在籍に戻す</button>
+                      <button
+                        style={{ ...S.linkBtn, color: "#b4341f", borderColor: "#e3b5ad" }}
+                        onClick={() => handleDelete(s)}
+                      >
+                        完全削除
+                      </button>
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={S.noteSmall}>
+            退職者は一覧・カレンダー・計画年休・管理簿に出ません。本人がログインすると「退職済み」と表示されます。
+          </p>
+        </section>
+      )}
+
       {(creating || editing) && (
         <StaffForm
           initial={editing}
           onCancel={() => { setCreating(false); setEditing(null); }}
           onSaved={() => { setCreating(false); setEditing(null); onChanged(); }}
           onOpenGuide={() => setShowGuide(true)}
+          onDelete={editing ? async () => { if (await handleDelete(editing)) setEditing(null); } : null}
         />
       )}
 
@@ -166,8 +233,24 @@ function ReissueGuide({ onClose }) {
   );
 }
 
-function StaffForm({ initial, onCancel, onSaved, onOpenGuide }) {
+function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
   const isEdit = !!initial;
+  const [retireDate, setRetireDate] = useState(todayStr());
+  const [retireBusy, setRetireBusy] = useState(false);
+
+  async function retire() {
+    if (!retireDate) { alert("退職日を入力してください。"); return; }
+    if (!window.confirm(`${initial.name} さんを ${fmt(retireDate)} 付けで退職にしますか?\n記録は残り、「退職者」欄からいつでも戻せます。`)) return;
+    setRetireBusy(true);
+    try {
+      await retireStaff(initial.id, retireDate);
+      onSaved();
+    } catch (e) {
+      console.error(e);
+      alert("退職処理に失敗しました。");
+    }
+    setRetireBusy(false);
+  }
   const [loginId, setLoginId] = useState(initial?.loginId || "");
   const [initPassword, setInitPassword] = useState("");
   const [reissuePw, setReissuePw] = useState("");
@@ -371,6 +454,42 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide }) {
             </button>
           </div>
           {reissueMsg && <div style={{ ...S.errorBox, background: "#e8f3ee", color: "#2f6358" }}>{reissueMsg}</div>}
+        </div>
+      )}
+
+      {isEdit && (
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px dashed #e2ded5" }}>
+          <h3 style={S.subTitle}>🚪 退職にする</h3>
+          <p style={S.noteSmall}>
+            記録は保存されたまま「退職者」欄に格納され、一覧・カレンダー・計画年休・管理簿から外れます。
+            本人はログインできなくなり、「在籍に戻す」でいつでも復帰できます。
+          </p>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 8 }}>
+            <input type="date" value={retireDate} onChange={(e) => setRetireDate(e.target.value)} style={{ ...S.input, flex: 1 }} />
+            <button
+              onClick={retire}
+              style={{ ...S.btnGhost, padding: "11px 16px", whiteSpace: "nowrap", opacity: retireBusy ? 0.6 : 1 }}
+              disabled={retireBusy}
+            >
+              {retireBusy ? "処理中…" : "この日付で退職にする"}
+            </button>
+          </div>
+
+          {onDelete && (
+            <div style={{ marginTop: 16 }}>
+              <h3 style={{ ...S.subTitle, color: "#b4341f" }}>⚠ 完全削除（取り消せません）</h3>
+              <p style={S.noteSmall}>
+                登録ミスなどでデータごと消したい場合だけ使ってください。取得記録もすべて消えます。
+                退職しただけなら上の「退職にする」を使ってください。
+              </p>
+              <button
+                onClick={onDelete}
+                style={{ ...S.btnGhost, color: "#b4341f", borderColor: "#e3b5ad", marginTop: 4 }}
+              >
+                このスタッフを完全削除する
+              </button>
+            </div>
+          )}
         </div>
       )}
     </section>

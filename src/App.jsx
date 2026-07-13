@@ -72,6 +72,24 @@ export default function App() {
     );
   }
 
+  // 退職済みスタッフはログインしても中に入れない
+  if (me.role === "staff" && me.status === "retired") {
+    return (
+      <div style={S.loginWrap}>
+        <style>{globalCss}</style>
+        <div style={S.loginCard}>
+          <h1 style={S.loginTitle}>退職済みです</h1>
+          <p style={S.empty}>
+            {me.name}さんは退職済みのため、このアプリは利用できません。お問い合わせは医院までお願いします。
+          </p>
+          <button style={S.btnPrimary} onClick={logout}>
+            ログアウト
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const isOwner = me.role === "owner";
 
   return (

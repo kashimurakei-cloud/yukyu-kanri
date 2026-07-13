@@ -18,18 +18,25 @@ export const WEEKDAYS = [
   { key: "sat", label: "土" },
 ];
 
+// ローカルタイムで YYYY-MM-DD にする（toISOString はUTC変換で1日ずれるため使わない）
+function toDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 export function addMonths(dateStr, months) {
   const d = new Date(dateStr + "T00:00:00");
   const day = d.getDate();
   d.setMonth(d.getMonth() + months);
   if (d.getDate() !== day) d.setDate(0);
-  return d.toISOString().slice(0, 10);
+  return toDateStr(d);
 }
 function grantDateAt(joinDate, index) {
   return addMonths(joinDate, 6 + index * 12);
 }
 export function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return toDateStr(new Date());
 }
 export function fmt(dateStr) {
   if (!dateStr) return "—";
@@ -79,15 +86,46 @@ export function nextGrant(joinDate, workDaysPerWeek, asOf = todayStr()) {
   return null;
 }
 
-// 残数計算（時効2年）。付与分 = 付与日数 × その人の1日分。
+/* FIFO消化: 各取得を「その取得日時点で有効だった付与」から古い順に引く。
+   どの付与にも当てられない分は overflow として返す（残から差し引いて過大計上を防ぐ）。 */
+function fifoConsume(grants, records) {
+  const left = grants.map((g) => g.minutes);
+  let overflow = 0;
+  const recs = [...(records || [])].sort((a, b) => (a.date < b.date ? -1 : 1));
+  for (const r of recs) {
+    let need = Number(r.minutes || 0);
+    for (let i = 0; i < grants.length && need > 0; i++) {
+      const g = grants[i];
+      if (g.grantDate <= r.date && r.date < g.expire && left[i] > 0) {
+        const take = Math.min(left[i], need);
+        left[i] -= take;
+        need -= take;
+      }
+    }
+    overflow += need;
+  }
+  return { left, overflow };
+}
+
+// 残数計算（時効2年・FIFO消化）。付与分 = 付与日数 × その人の1日分。
+// 過去分をさかのぼって登録しても「当時の付与」から消化されるため、
+// 時効消滅済みの付与にかかる取得は現在の残を減らさない。
 export function calcBalance(staff, records, asOf = todayStr()) {
   const daily = staff.dailyMinutes || 480;
   const rawGrants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf);
-  const grants = rawGrants.map((g) => ({ ...g, minutes: g.days * daily }));
-  const active = grants.filter((g) => addMonths(g.grantDate, 24) > asOf);
+  const grants = rawGrants.map((g) => ({ ...g, minutes: g.days * daily, expire: addMonths(g.grantDate, 24) }));
+  const active = grants.filter((g) => g.expire > asOf);
   const grantedMin = active.reduce((s, g) => s + g.minutes, 0);
   const usedMin = (records || []).reduce((s, r) => s + Number(r.minutes || 0), 0);
-  return { grants, active, grantedMin, usedMin, remainMin: grantedMin - usedMin, daily };
+  const { left, overflow } = fifoConsume(grants, records);
+  let remainMin = 0;
+  let lapsedMin = 0; // 時効消滅した未消化分
+  grants.forEach((g, i) => {
+    if (g.expire > asOf) remainMin += left[i];
+    else lapsedMin += left[i];
+  });
+  remainMin = Math.max(0, remainMin - overflow);
+  return { grants, active, grantedMin, usedMin, remainMin, lapsedMin, daily };
 }
 
 // このスタッフが、指定された計画年休「予定」のうち
@@ -142,23 +180,20 @@ export function fiveDayProgress(staff, records, asOf = todayStr()) {
 }
 
 /* ---------- ③ 時効消滅の事前警告 ----------
-   古い付与から順に消化した(FIFO)と仮定し、残った分の失効予定を出す。 */
+   FIFO消化（各取得は取得日時点で有効だった付与から）後に残った分の失効予定を出す。 */
 export function expiringGrants(staff, records, asOf = todayStr(), withinDays = 90) {
   const daily = staff.dailyMinutes || 480;
   const grants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf)
     .map((g) => ({ ...g, minutes: g.days * daily, expire: addMonths(g.grantDate, 24) }));
-  let pool = (records || []).reduce((s, r) => s + Number(r.minutes || 0), 0);
+  const { left } = fifoConsume(grants, records);
   const out = [];
-  for (const g of grants) {
-    const consumed = Math.min(pool, g.minutes);
-    pool -= consumed;
-    const left = g.minutes - consumed;
-    if (left > 0 && g.expire > asOf) {
+  grants.forEach((g, i) => {
+    if (left[i] > 0 && g.expire > asOf) {
       const inDays = Math.round((new Date(g.expire + "T00:00:00") - new Date(asOf + "T00:00:00")) / 86400000);
       if (inDays <= withinDays) {
-        out.push({ expireDate: g.expire, remainMin: left, remainDays: left / daily, inDays });
+        out.push({ expireDate: g.expire, remainMin: left[i], remainDays: left[i] / daily, inDays });
       }
     }
-  }
+  });
   return out;
 }

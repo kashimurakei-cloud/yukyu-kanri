@@ -14,6 +14,7 @@ import {
   addLeaveRecord,
 } from "../data";
 import StaffManager from "./StaffManager";
+import StaffView from "./StaffView";
 import OwnerHome, { LeaveCalendar, analyzeAll } from "./OwnerHome";
 import PrintLedger from "./PrintLedger";
 import Toast from "./Toast";
@@ -30,7 +31,9 @@ export default function OwnerView({ me }) {
     toastTimer.current = setTimeout(() => setToast(null), 4000);
   };
   const [focusStaffId, setFocusStaffId] = useState(null);
+  const [previewStaffId, setPreviewStaffId] = useState(null); // 本人画面プレビュー中のスタッフ
   const [staffList, setStaffList] = useState([]);
+  const [retiredList, setRetiredList] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [plannedLeaves, setPlannedLeaves] = useState([]);
   const [recordsByStaff, setRecordsByStaff] = useState({});
@@ -43,8 +46,10 @@ export default function OwnerView({ me }) {
       // 起動時に、到来した計画年休を反映（予約方式の自動引き落とし）
       await applyDuePlannedLeaves(all);
 
-      const staffOnly = all.filter((s) => s.role === "staff");
+      const staffAll = all.filter((s) => s.role === "staff");
+      const staffOnly = staffAll.filter((s) => s.status !== "retired");
       setStaffList(staffOnly);
+      setRetiredList(staffAll.filter((s) => s.status === "retired"));
       const map = {};
       await Promise.all(
         staffOnly.map(async (s) => {
@@ -81,6 +86,29 @@ export default function OwnerView({ me }) {
   }
 
   const pendingPlanned = plannedLeaves.filter((p) => p.status !== "applied");
+
+  // 本人画面プレビュー（ログアウト不要。入力もできる。通知なし）
+  const previewStaff = staffList.find((s) => s.id === previewStaffId);
+  if (previewStaff) {
+    return (
+      <>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+          background: "#2d4a56", color: "#fff", borderRadius: 12,
+          padding: "10px 16px", marginBottom: 14, fontSize: 13.5, fontWeight: 700,
+        }}>
+          <span>👀 {previewStaff.name} さんの画面を表示中（院長モード・入力もできます／本人への通知は出ません）</span>
+          <button
+            style={{ ...S.btnGhost, marginLeft: "auto", background: "#fff" }}
+            onClick={async () => { setPreviewStaffId(null); await reload(); }}
+          >
+            ← 院長画面に戻る
+          </button>
+        </div>
+        <StaffView key={previewStaff.id} me={previewStaff} impersonated />
+      </>
+    );
+  }
 
   return (
     <>
@@ -121,6 +149,7 @@ export default function OwnerView({ me }) {
           showToast={showToast}
           focusStaffId={focusStaffId}
           onFocusDone={() => setFocusStaffId(null)}
+          onPreview={setPreviewStaffId}
         />
       )}
 
@@ -139,7 +168,7 @@ export default function OwnerView({ me }) {
       )}
 
       {!loading && tab === "manage" && (
-        <StaffManager staffList={staffList} onChanged={reload} />
+        <StaffManager staffList={staffList} retiredList={retiredList} onChanged={reload} />
       )}
 
       <PrintLedger staffList={staffList} recordsByStaff={recordsByStaff} />
@@ -149,7 +178,7 @@ export default function OwnerView({ me }) {
 }
 
 /* ------- 職員(カードUI) ------- */
-function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, showToast, focusStaffId, onFocusDone }) {
+function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, showToast, focusStaffId, onFocusDone, onPreview }) {
   const [selectedId, setSelectedId] = useState(null);
   const selected = staffList.find((s) => s.id === selectedId);
   const rows = analyzeAll(staffList, recordsByStaff, pendingPlanned);
@@ -297,13 +326,14 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
           onClose={() => setSelectedId(null)}
           onChanged={onChanged}
           showToast={showToast}
+          onPreview={onPreview}
         />
       )}
     </>
   );
 }
 
-function StaffHistoryCard({ staff, records, onClose, onChanged, showToast }) {
+function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPreview }) {
   const bal = calcBalance(staff, records);
   const daily = bal.daily;
   const sorted = [...records].sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -313,8 +343,7 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast }) {
 
   async function handleProxyAdd(rec) {
     const newId = await addLeaveRecord(staff.id, staff.name, rec, false); // 代理登録は通知なし
-    setShowProxy(false);
-    await onChanged();
+    await onChanged(); // フォームは閉じない（過去分の連続入力用）
     showToast?.(`✓ ${staff.name}さんの取得（${fmt(rec.date)}）を登録しました`, async () => {
       await deleteLeaveRecord(staff.id, newId);
       await onChanged();
@@ -352,7 +381,10 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast }) {
     <section style={{ ...S.card, border: "1.5px solid #3a7d6e" }}>
       <div style={S.notifHead}>
         <h2 style={S.cardTitle}>{staff.name} さんの申請履歴</h2>
-        <button onClick={onClose} style={S.btnGhost}>閉じる</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => onPreview?.(staff.id)} style={S.btnGhost}>👀 本人画面を開く</button>
+          <button onClick={onClose} style={S.btnGhost}>閉じる</button>
+        </div>
       </div>
       <div className="histSummary" style={S.histSummary}>
         <Stat label="残" main={`${(bal.remainMin / daily).toFixed(1)}日分`} sub={`${bal.remainMin}分`} />
@@ -438,6 +470,8 @@ function ProxyAddForm({ staff, onAdd, onCancel }) {
   const [type, setType] = useState("normal");
   const [memo, setMemo] = useState("");
   const [busy, setBusy] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
+  const [lastSaved, setLastSaved] = useState(null);
 
   const computedMin = mode === "days" ? Math.round(Number(days || 0) * daily) : Number(minutes || 0);
 
@@ -446,6 +480,11 @@ function ProxyAddForm({ staff, onAdd, onCancel }) {
     setBusy(true);
     try {
       await onAdd({ date, minutes: computedMin, type, memo });
+      // 連続入力: フォームは開いたまま。メモだけクリアして次の入力へ。
+      // 日付は残す（過去分入力で近い日付を続けて入れやすいように）。
+      setSavedCount((n) => n + 1);
+      setLastSaved(date);
+      setMemo("");
     } catch (e) {
       console.error(e);
       alert("登録に失敗しました。");
@@ -471,7 +510,20 @@ function ProxyAddForm({ staff, onAdd, onCancel }) {
         <span style={S.hint}>昔の1日単位の記録は「日数」で。1日={daily}分で換算します。</span>
       </label>
       <div style={S.quickRow}>
-        <button type="button" style={mode === "days" ? S.quickBtnOn : S.quickBtn} onClick={() => setMode("days")}>日数で入力</button>
+        <button
+          type="button"
+          style={mode === "days" && Number(days) === 1 ? S.quickBtnOn : S.quickBtn}
+          onClick={() => { setMode("days"); setDays("1"); }}
+        >
+          1日休み（{daily}分）
+        </button>
+        <button
+          type="button"
+          style={mode === "days" && Number(days) === 0.5 ? S.quickBtnOn : S.quickBtn}
+          onClick={() => { setMode("days"); setDays("0.5"); }}
+        >
+          半日（{daily / 2}分）
+        </button>
         <button type="button" style={mode === "minutes" ? S.quickBtnOn : S.quickBtn} onClick={() => setMode("minutes")}>分で入力</button>
       </div>
 
@@ -492,11 +544,19 @@ function ProxyAddForm({ staff, onAdd, onCancel }) {
       <label style={S.fieldLabel}>メモ（任意）</label>
       <input type="text" placeholder="過去分 など" value={memo} onChange={(e) => setMemo(e.target.value)} style={S.input} />
 
+      {savedCount > 0 && (
+        <p style={{ ...S.noteSmall, color: "#3a7d6e", fontWeight: 600 }}>
+          ✓ {fmt(lastSaved)} を登録しました（この画面で{savedCount}件目）。続けて入力できます。
+        </p>
+      )}
+
       <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
         <button style={{ ...S.btnPrimary, marginTop: 0, opacity: busy ? 0.6 : 1 }} onClick={submit} disabled={busy}>
-          {busy ? "登録中…" : "登録する"}
+          {busy ? "登録中…" : savedCount > 0 ? "続けて登録する" : "登録する"}
         </button>
-        <button style={{ ...S.btnGhost, padding: "12px 20px" }} onClick={onCancel}>キャンセル</button>
+        <button style={{ ...S.btnGhost, padding: "12px 20px" }} onClick={onCancel}>
+          {savedCount > 0 ? "閉じる" : "キャンセル"}
+        </button>
       </div>
     </div>
   );

@@ -215,6 +215,42 @@ try {
   html = rootEl.innerHTML;
   console.log("History opens:", html.includes("申請履歴"));
 
+  /* 代理登録の連続入力 */
+  console.log("=== OWNER: PROXY CONTINUOUS ADD ===");
+  click(byText(rootEl, "button", "院長が代理で取得を登録"));
+  await wait(300);
+  html = rootEl.innerHTML;
+  console.log("Proxy form opens:", html.includes("代理で取得を登録") && html.includes("取得日"));
+  const beforeProxy = globalThis.__DB["staff/u-a/leaveRecords"].length;
+  setVal([...rootEl.querySelectorAll('input[type="date"]')].pop(), daysFrom(-200));
+  await wait(100);
+  click(byText(rootEl, "button", "登録する"));
+  await wait(700);
+  console.log("Proxy record added:", globalThis.__DB["staff/u-a/leaveRecords"].length === beforeProxy + 1);
+  html = rootEl.innerHTML;
+  console.log("Form stays open (連続入力):", html.includes("続けて登録"));
+  console.log("Saved indicator (1件目):", html.includes("1件目"));
+  setVal([...rootEl.querySelectorAll('input[type="date"]')].pop(), daysFrom(-190));
+  await wait(100);
+  click(byText(rootEl, "button", "続けて登録する"));
+  await wait(700);
+  console.log("Second proxy add:", globalThis.__DB["staff/u-a/leaveRecords"].length === beforeProxy + 2);
+  console.log("Saved indicator (2件目):", rootEl.innerHTML.includes("2件目"));
+  console.log("1日休みプリセット:", rootEl.innerHTML.includes("1日休み") && rootEl.innerHTML.includes("半日"));
+
+  /* 本人画面プレビュー（院長モード・ログアウト不要） */
+  console.log("=== OWNER: IMPERSONATION PREVIEW ===");
+  click(byText(rootEl, "button", "本人画面を開く"));
+  await wait(700);
+  html = rootEl.innerHTML;
+  console.log("Preview banner:", html.includes("さんの画面を表示中"));
+  console.log("StaffView hero shown:", html.includes("あなたの有給残"));
+  console.log("No password card:", !html.includes("パスワード変更"));
+  console.log("Staff-style input available:", html.includes("日をタップで取得日に設定"));
+  click(byText(rootEl, "button", "院長画面に戻る"));
+  await wait(900);
+  console.log("Back to owner tabs:", rootEl.innerHTML.includes("スタッフ管理"));
+
   /* カレンダー */
   click(byText(rootEl, "button", "カレンダー"));
   await wait(400);
@@ -316,6 +352,42 @@ try {
   const staffAdded = globalThis.__DB["staff"].some((s) => s.loginId === "mina" && s.name === "田中 三奈");
   console.log("Account created via stub:", createdOk);
   console.log("Staff doc saved with loginId:", staffAdded);
+
+  /* 退職 → ログインブロック → 復帰 → 完全削除 */
+  console.log("=== OWNER: RETIRE / RESTORE / DELETE ===");
+  let rowMina = [...rootEl.querySelectorAll("tr")].find((tr) => tr.textContent.includes("田中 三奈"));
+  click(byText(rowMina, "button", "編集"));
+  await wait(300);
+  html = rootEl.innerHTML;
+  console.log("Retire section in form:", html.includes("退職にする"));
+  console.log("Delete section in form:", html.includes("完全削除"));
+  click(byText(rootEl, "button", "この日付で退職にする"));
+  await wait(900);
+  const minaDoc = globalThis.__DB["staff"].find((s) => s.name === "田中 三奈");
+  console.log("Status retired + date:", minaDoc?.status === "retired" && !!minaDoc?.retiredDate);
+  html = rootEl.innerHTML;
+  console.log("退職者欄に表示:", html.includes("退職者") && html.includes("田中 三奈"));
+
+  // 退職者がログインすると「退職済み」でブロック
+  globalThis.__AUTH_UID = minaDoc.id;
+  const root4 = dom.window.document.createElement("div");
+  dom.window.document.body.appendChild(root4);
+  globalThis.__renderApp(root4);
+  await wait(700);
+  console.log("Retired login blocked:", root4.innerHTML.includes("退職済み"));
+
+  // 復帰
+  click(byText(rootEl, "button", "在籍に戻す"));
+  await wait(900);
+  console.log("Restore to active:", globalThis.__DB["staff"].find((s) => s.name === "田中 三奈")?.status === "active");
+
+  // 完全削除（記録ごと）
+  rowMina = [...rootEl.querySelectorAll("tr")].find((tr) => tr.textContent.includes("田中 三奈"));
+  click(byText(rowMina, "button", "編集"));
+  await wait(300);
+  click(byText(rootEl, "button", "このスタッフを完全削除する"));
+  await wait(900);
+  console.log("Completely deleted:", !globalThis.__DB["staff"].some((s) => s.name === "田中 三奈"));
 
   /* 手順書モーダル */
   console.log("=== OWNER: REISSUE GUIDE ===");

@@ -30,6 +30,23 @@ export async function upsertStaff(uid, data) {
   await setDoc(doc(db, "staff", uid), data, { merge: true });
 }
 
+// 退職処理: データは残したまま status="retired" にする（復帰は status:"active" で上書き）
+export async function retireStaff(uid, retiredDate) {
+  await updateDoc(doc(db, "staff", uid), { status: "retired", retiredDate });
+}
+export async function unretireStaff(uid) {
+  await updateDoc(doc(db, "staff", uid), { status: "active", retiredDate: "" });
+}
+
+// 完全削除: 取得記録ごとFirestoreから消す（Authアカウントはコンソールで別途削除）
+export async function deleteStaffCompletely(uid) {
+  const records = await getLeaveRecords(uid);
+  for (const r of records) {
+    await deleteDoc(doc(db, "staff", uid, "leaveRecords", r.id));
+  }
+  await deleteDoc(doc(db, "staff", uid));
+}
+
 /* ---------- 取得記録 ---------- */
 export async function getLeaveRecords(uid) {
   const q = query(collection(db, "staff", uid, "leaveRecords"), orderBy("date", "desc"));
@@ -140,7 +157,7 @@ export async function deletePlannedLeave(id) {
 export async function applyDuePlannedLeaves(allStaff, asOf = todayStr()) {
   const planned = await getPlannedLeaves();
   const due = planned.filter((p) => p.status !== "applied" && p.date <= asOf);
-  const staffOnly = allStaff.filter((s) => s.role === "staff");
+  const staffOnly = allStaff.filter((s) => s.role === "staff" && s.status !== "retired");
   const appliedSummaries = [];
 
   for (const p of due) {
