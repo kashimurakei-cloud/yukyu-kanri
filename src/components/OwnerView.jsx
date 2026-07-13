@@ -219,8 +219,8 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
                   <span style={{ fontSize: 11.5, color: "#8a857a" }}>週{s.workDaysPerWeek}日</span>
                 </div>
                 <div style={{ fontSize: 26, fontWeight: 800, margin: "6px 0 2px" }}>
-                  {remainDays.toFixed(1)}<span style={{ fontSize: 13 }}>日分</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: "#8a857a", marginLeft: 8 }}>残</span>
+                  {bal.remainMin.toLocaleString()}<span style={{ fontSize: 13 }}>分</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#8a857a", marginLeft: 8 }}>残（約{remainDays.toFixed(1)}日分）</span>
                 </div>
                 {five && (
                   <div style={{ margin: "8px 0 2px" }}>
@@ -244,7 +244,7 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
                   {low && <span style={S.warnTag}>残不足見込み</span>}
                   {warn5 && <span style={S.cautionTag}>5日割れ見込み</span>}
                   {expiring.map((e, i) => (
-                    <span key={i} style={S.cautionTag}>⏳{e.remainDays.toFixed(1)}日分 {fmt(e.expireDate)}消滅</span>
+                    <span key={i} style={S.cautionTag}>⏳{e.remainMin}分 {fmt(e.expireDate)}消滅</span>
                   ))}
                 </div>
                 <div style={{ fontSize: 11.5, color: "#8a857a", marginTop: 8 }}>
@@ -387,9 +387,9 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
         </div>
       </div>
       <div className="histSummary" style={S.histSummary}>
-        <Stat label="残" main={`${(bal.remainMin / daily).toFixed(1)}日分`} sub={`${bal.remainMin}分`} />
-        <Stat label="付与合計" main={`${(bal.grantedMin / daily).toFixed(1)}日分`} sub={`${bal.grantedMin}分`} />
-        <Stat label="取得済" main={`${(bal.usedMin / daily).toFixed(1)}日分`} sub={`${bal.usedMin}分`} />
+        <Stat label="残" main={`${bal.remainMin.toLocaleString()}分`} sub={`約${(bal.remainMin / daily).toFixed(1)}日分`} />
+        <Stat label="付与合計" main={`${bal.grantedMin.toLocaleString()}分`} sub={`約${(bal.grantedMin / daily).toFixed(1)}日分`} />
+        <Stat label="取得済" main={`${bal.usedMin.toLocaleString()}分`} sub={`約${(bal.usedMin / daily).toFixed(1)}日分`} />
         <Stat label="次回付与" main={ng ? fmt(ng.grantDate) : "—"} sub={ng ? `${ng.days}日` : ""} />
       </div>
       <h3 style={S.subTitle}>取得履歴</h3>
@@ -416,8 +416,8 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
                   </span>
                 </td>
                 <td style={S.tdR}>
-                  {(r.minutes / daily).toFixed(1)}日分
-                  <span style={S.minSub}>（{r.minutes}分）</span>
+                  {r.minutes}分
+                  <span style={S.minSub}>（約{(r.minutes / daily).toFixed(1)}日分）</span>
                 </td>
                 <td style={S.tdMemo}>{r.memo || "—"}</td>
                 <td style={S.td}>
@@ -658,7 +658,7 @@ function PlannedTab({ plannedLeaves, onAdd, onDelete, staffList, recordsByStaff 
                   <div key={a.name} style={S.affectRow}>
                     <span>{a.name}（{a.m}分）</span>
                     <span style={{ fontWeight: 700, color: low ? "#b4341f" : warn ? "#b07a1f" : "#2f6358" }}>
-                      反映後 {(a.afterMin / a.daily).toFixed(1)}日分
+                      反映後 {a.afterMin.toLocaleString()}分（約{(a.afterMin / a.daily).toFixed(1)}日分）
                       {low && <span style={S.warnTag}>不足</span>}
                       {warn && <span style={S.cautionTag}>5日割れ</span>}
                     </span>

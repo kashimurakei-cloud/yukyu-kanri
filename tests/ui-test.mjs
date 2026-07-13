@@ -206,6 +206,7 @@ try {
   console.log("=== OWNER: STAFF CARDS ===");
   console.log("Cards for both staff:", html.includes("佐藤 花子") && html.includes("鈴木 美咲"));
   console.log("残 display:", html.includes("日分"));
+  console.log("分メイン表示（約x日分はカッコ）:", html.includes("残（約"));
   console.log("年5日義務 bar:", html.includes("年5日義務"));
   console.log("⏳時効 chip on B:", html.includes("⏳"));
 
@@ -286,6 +287,7 @@ try {
   html = root2.innerHTML;
   console.log("=== STAFF: HERO ===");
   console.log("Hero 残:", html.includes("あなたの有給残"));
+  console.log("Hero 分メイン:", html.includes("約") && html.includes("1日=平均"));
   console.log("年5日義務 in hero:", html.includes("年5日取得義務"));
   console.log("MiniPickCal:", html.includes("日をタップで取得日に設定"));
 

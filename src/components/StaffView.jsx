@@ -79,20 +79,20 @@ export default function StaffView({ me, impersonated = false }) {
       <section style={S.heroCard}>
         <div style={S.heroLabel}>あなたの有給残</div>
         <div style={S.heroValue}>
-          {(bal.remainMin / daily).toFixed(1)}
-          <span style={S.heroDayUnit}>日分</span>
-          <span style={S.heroSub}>（残 {bal.remainMin}分 ／ 1日={daily}分）</span>
+          {bal.remainMin.toLocaleString()}
+          <span style={S.heroDayUnit}>分</span>
+          <span style={S.heroSub}>（約{(bal.remainMin / daily).toFixed(1)}日分 ／ 1日=平均{daily}分）</span>
         </div>
         {upcoming.minutes > 0 && (
           <div style={S.forecastBox}>
             <div style={S.forecastRow}>
               <span>次回付与までの計画年休（予定）</span>
-              <span style={S.forecastMinus}>−{(upcoming.minutes / daily).toFixed(1)}日分</span>
+              <span style={S.forecastMinus}>−{upcoming.minutes}分（約{(upcoming.minutes / daily).toFixed(1)}日分）</span>
             </div>
             <div style={{ ...S.forecastRow, fontWeight: 700 }}>
               <span>差引の見込み残</span>
               <span style={{ color: forecastMin < 0 ? "#ffd2c8" : "#fff" }}>
-                {(forecastMin / daily).toFixed(1)}日分
+                {forecastMin}分（約{(forecastMin / daily).toFixed(1)}日分）
               </span>
             </div>
           </div>
@@ -120,15 +120,15 @@ export default function StaffView({ me, impersonated = false }) {
             {expiring.map((e, i) => (
               <div key={i} style={S.forecastRow}>
                 <span>⏳ 使わないと消えてしまう分</span>
-                <span style={{ fontWeight: 800 }}>{e.remainDays.toFixed(1)}日分（{fmt(e.expireDate)}に時効）</span>
+                <span style={{ fontWeight: 800 }}>{e.remainMin}分・約{e.remainDays.toFixed(1)}日分（{fmt(e.expireDate)}に時効）</span>
               </div>
             ))}
           </div>
         )}
         <div style={S.heroMeta}>
-          <span>付与合計 {(bal.grantedMin / daily).toFixed(1)}日分</span>
+          <span>付与合計 {bal.grantedMin.toLocaleString()}分（約{(bal.grantedMin / daily).toFixed(1)}日分）</span>
           <span style={S.dot}>•</span>
-          <span>取得済 {(bal.usedMin / daily).toFixed(1)}日分</span>
+          <span>取得済 {bal.usedMin.toLocaleString()}分（約{(bal.usedMin / daily).toFixed(1)}日分）</span>
           {ng && (
             <>
               <span style={S.dot}>•</span>
@@ -147,7 +147,7 @@ export default function StaffView({ me, impersonated = false }) {
                 <strong>{fmt(it.date)}</strong>
                 <span style={S.tagPlan}>計画年休</span>
                 <span style={S.plainMemo}>
-                  {(it.minutes / daily).toFixed(1)}日分（{it.minutes}分）
+                  {it.minutes}分（約{(it.minutes / daily).toFixed(1)}日分）
                   {it.memo ? ` ／ ${it.memo}` : ""}
                 </span>
               </li>
@@ -189,8 +189,8 @@ export default function StaffView({ me, impersonated = false }) {
                     </span>
                   </td>
                   <td style={S.tdR}>
-                    {(r.minutes / daily).toFixed(1)}日分
-                    <span style={S.minSub}>（{r.minutes}分）</span>
+                    {r.minutes}分
+                    <span style={S.minSub}>（約{(r.minutes / daily).toFixed(1)}日分）</span>
                   </td>
                   <td style={S.tdMemo}>{r.memo || "—"}</td>
                   <td style={S.td}>
@@ -372,7 +372,7 @@ function AddRecordCard({ staff, onAdd, records }) {
 
       <label style={S.fieldLabel}>
         取得時間（分）
-        <span style={S.hint}>ボタンで入れるか、分を直接入力できます。あなたの1日は {daily}分。</span>
+        <span style={S.hint}>ボタンで入れるか、分を直接入力できます。あなたの1日は平均{daily}分。</span>
       </label>
       <div style={S.quickRow}>
         <button type="button" style={S.quickBtn} onClick={() => pick(daily, "")}>
@@ -417,7 +417,7 @@ function GrantsCard({ bal }) {
             <tr>
               <th style={S.th}>付与日</th>
               <th style={S.th}>区分</th>
-              <th style={S.thR}>日数</th>
+              <th style={S.thR}>付与分</th>
               <th style={S.th}>状態</th>
             </tr>
           </thead>
@@ -431,7 +431,7 @@ function GrantsCard({ bal }) {
                   <tr key={g.grantDate}>
                     <td style={S.td}>{fmt(g.grantDate)}</td>
                     <td style={S.td}>{g.label}</td>
-                    <td style={S.tdR}>{g.days}日</td>
+                    <td style={S.tdR}>{g.minutes.toLocaleString()}分<span style={S.minSub}>（{g.days}日）</span></td>
                     <td style={S.td}>
                       <span style={isActive ? S.tagActive : S.tagExpired}>{isActive ? "有効" : "時効"}</span>
                     </td>

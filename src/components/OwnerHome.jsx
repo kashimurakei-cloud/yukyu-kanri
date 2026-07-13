@@ -36,16 +36,17 @@ export default function OwnerHome({ staffList, recordsByStaff, pendingPlanned, o
     else if (r.five && r.five.status === "warn")
       alerts.push({ level: "mid", uid: r.s.id, msg: `${r.s.name}さん：年5日義務のペースが遅れています（現在 ${r.five.takenDays.toFixed(1)}日）` });
     for (const e of r.expiring)
-      alerts.push({ level: "mid", uid: r.s.id, msg: `${r.s.name}さん：${e.remainDays.toFixed(1)}日分が ${fmt(e.expireDate)} に時効消滅（あと${e.inDays}日）` });
+      alerts.push({ level: "mid", uid: r.s.id, msg: `${r.s.name}さん：${e.remainMin}分（約${e.remainDays.toFixed(1)}日分）が ${fmt(e.expireDate)} に時効消滅（あと${e.inDays}日）` });
     if (r.forecast < 0)
-      alerts.push({ level: "high", uid: r.s.id, msg: `${r.s.name}さん：計画年休で残が不足する見込み（${(r.forecast / r.bal.daily).toFixed(1)}日分）` });
+      alerts.push({ level: "high", uid: r.s.id, msg: `${r.s.name}さん：計画年休で残が不足する見込み（${r.forecast}分）` });
   }
   alerts.sort((a, b) => (a.level === "high" ? -1 : 1) - (b.level === "high" ? -1 : 1));
 
   // 直近30日の取得予定(全員分+計画年休)
   const upcoming = [];
   const horizon = new Date(today + "T00:00:00"); horizon.setDate(horizon.getDate() + 30);
-  const horizonStr = horizon.toISOString().slice(0, 10);
+  // toISOString()はUTC変換でJSTだと1日ずれるため使わない
+  const horizonStr = `${horizon.getFullYear()}-${String(horizon.getMonth() + 1).padStart(2, "0")}-${String(horizon.getDate()).padStart(2, "0")}`;
   for (const r of rows) {
     for (const rec of r.records) {
       if (rec.date >= today && rec.date <= horizonStr) {
@@ -123,7 +124,7 @@ export default function OwnerHome({ staffList, recordsByStaff, pendingPlanned, o
                   {u.type === "planned" ? "計画年休" : "有給"}
                 </span>
                 <span style={{ color: "#6a665e", fontSize: 12.5 }}>
-                  {u.minutes > 0 ? `${(u.minutes / u.daily).toFixed(1)}日分` : u.memo || ""}
+                  {u.minutes > 0 ? `${u.minutes}分（約${(u.minutes / u.daily).toFixed(1)}日分）` : u.memo || ""}
                 </span>
               </div>
             ))}

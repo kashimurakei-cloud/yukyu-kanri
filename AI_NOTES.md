@@ -46,6 +46,6 @@
 ## ハマりどころ
 - 印刷で position:absolute を使うと改ページ(page-break)が効かなくなる → createPortal + 「body > *:not(.yk-print){display:none}」方式を守る。
 - 日本語IME: Enter処理は `e.nativeEvent.isComposing` でガード（Login済み）。
-- 単位は常に「分」。日数表示は dailyMinutes で割る。スタッフごとに1日の分数が違う。
+- 単位は常に「分」。表示も分がメイン（「10080分（約21.0日分）」形式。日数はdailyMinutes=平均で割った目安）。曜日で勤務分が違う（510分/440分など）ため日数は「約」を付ける。印刷用管理簿と年5日義務だけは日数ベース。
 - addLeaveRecord / addPlannedLeave はドキュメントIDを返す（トースト取消で使用）。
 - テストのモックは new Date() から相対日付で組む（実行日に依存させない）。
