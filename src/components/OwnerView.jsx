@@ -14,7 +14,7 @@ import {
   deleteLeaveRecord,
   addLeaveRecord,
 } from "../data";
-import StaffManager from "./StaffManager";
+import StaffManager, { empTypeOf, EMP_LABEL } from "./StaffManager";
 import StaffView from "./StaffView";
 import OwnerHome, { LeaveCalendar, analyzeAll } from "./OwnerHome";
 import PrintLedger from "./PrintLedger";
@@ -201,11 +201,25 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusStaffId]);
 
+  // 常勤/非常勤でグループ分け（各グループ内は入職日順）
+  const groups = [
+    { type: "full", label: EMP_LABEL.full, rows: [] },
+    { type: "part", label: EMP_LABEL.part, rows: [] },
+  ];
+  for (const r of rows) {
+    (empTypeOf(r.s) === "full" ? groups[0] : groups[1]).rows.push(r);
+  }
+  for (const g of groups) g.rows.sort((a, b) => ((a.s.joinDate || "") < (b.s.joinDate || "") ? -1 : 1));
+
   return (
     <>
-      <section style={{ marginBottom: 16 }}>
+      {groups.filter((g) => g.rows.length > 0).map((group) => (
+      <section key={group.type} style={{ marginBottom: 16 }}>
+        <h2 style={{ ...S.cardTitle, marginBottom: 8 }}>
+          {group.label} <span style={{ fontSize: 12.5, color: "#8a857a", fontWeight: 600 }}>{group.rows.length}人</span>
+        </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
-          {rows.map(({ s, bal, ng, forecast, five, expiring }) => {
+          {group.rows.map(({ s, bal, ng, forecast, five, expiring }) => {
             const remainDays = bal.remainMin / bal.daily;
             const low = forecast < 0;
             const warn5 = forecast >= 0 && forecast < bal.daily * 5;
@@ -264,10 +278,11 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
             );
           })}
         </div>
-        {staffList.length === 0 && (
-          <p style={S.empty}>まだスタッフが登録されていません。「スタッフ管理」から追加してください。</p>
-        )}
       </section>
+      ))}
+      {staffList.length === 0 && (
+        <p style={S.empty}>まだスタッフが登録されていません。「スタッフ管理」から追加してください。</p>
+      )}
 
       {false && (
       <section style={S.card}>
@@ -350,11 +365,27 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
   const ng = nextGrant(staff.joinDate, staff.workDaysPerWeek);
   const [editing, setEditing] = useState(null);
   const [showProxy, setShowProxy] = useState(false);
+  const [showAdjust, setShowAdjust] = useState(false);
 
   async function handleProxyAdd(rec) {
     const newId = await addLeaveRecord(staff.id, staff.name, rec, false); // 代理登録は通知なし
     await onChanged(); // フォームは閉じない（過去分の連続入力用）
     showToast?.(`✓ ${staff.name}さんの取得（${fmt(rec.date)}）を登録しました`, async () => {
+      await deleteLeaveRecord(staff.id, newId);
+      await onChanged();
+    });
+  }
+
+  // 残高合わせ: 差分を「過去分一括消化」の調整記録として今日の日付で登録（FIFOで古い有効付与から消化される）
+  async function handleAdjust(diffMin) {
+    const newId = await addLeaveRecord(
+      staff.id, staff.name,
+      { date: todayStr(), minutes: diffMin, type: "adjust", memo: "過去分一括消化（残高合わせ）" },
+      false
+    );
+    setShowAdjust(false);
+    await onChanged();
+    showToast(`✓ 過去分 ${diffMin}分 をまとめて消化済みにしました`, async () => {
       await deleteLeaveRecord(staff.id, newId);
       await onChanged();
     });
@@ -437,8 +468,8 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
               <tr key={r.id}>
                 <td style={S.td}>{fmtW(r.date)}</td>
                 <td style={S.td}>
-                  <span style={r.type === "planned" ? S.tagPlan : S.tagNormal}>
-                    {r.type === "planned" ? "計画年休" : "通常"}
+                  <span style={r.type === "planned" ? S.tagPlan : r.type === "adjust" ? S.tagExpired : S.tagNormal}>
+                    {r.type === "planned" ? "計画年休" : r.type === "adjust" ? "調整" : "通常"}
                   </span>
                 </td>
                 <td style={S.tdR}>
@@ -474,6 +505,20 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
         )}
       </div>
 
+      <div style={{ marginTop: 10 }}>
+        {!showAdjust ? (
+          <button style={S.btnGhost} onClick={() => setShowAdjust(true)}>
+            🧮 残高合わせ（過去分をまとめて消化済みに）
+          </button>
+        ) : (
+          <BalanceAdjustForm
+            computedRemain={bal.remainMin}
+            onAdjust={handleAdjust}
+            onCancel={() => setShowAdjust(false)}
+          />
+        )}
+      </div>
+
       {editing && (
         <EditRecordModal
           record={editing}
@@ -483,6 +528,67 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
         />
       )}
     </section>
+  );
+}
+
+// 残高合わせフォーム: 「実際の残」を入れると差分を過去分一括消化として登録する。
+// 勤務歴の長いスタッフの過去記録を全部入力しなくても、残高だけ正しく合わせられる。
+function BalanceAdjustForm({ computedRemain, onAdjust, onCancel }) {
+  const [actual, setActual] = useState("");
+  const [busy, setBusy] = useState(false);
+  const actualNum = Number(actual || 0);
+  const diff = computedRemain - actualNum;
+  const valid = actual !== "" && actualNum >= 0 && diff > 0;
+
+  async function submit() {
+    if (!valid) return;
+    setBusy(true);
+    try {
+      await onAdjust(diff);
+    } catch (e) {
+      console.error(e);
+      alert("調整に失敗しました。");
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div style={{ background: "#fbfaf7", border: `1px solid ${"#e2ded5"}`, borderRadius: 12, padding: 16 }}>
+      <h3 style={S.subTitle}>🧮 残高合わせ（過去分をまとめて消化済みに）</h3>
+      <p style={S.noteSmall}>
+        過去の取得を1件ずつ入力しなくても、実際の残高に合わせられます。
+        差分は「過去分一括消化」という<strong>調整</strong>記録として1件登録され、古い有効な付与から順に消化されます。
+        調整分は年5日義務のカウントには入らないので、今期に実際に取った日はなるべく個別に入力してください。
+      </p>
+      <p style={{ fontSize: 14, fontWeight: 700 }}>計算上の残: {computedRemain.toLocaleString()}分</p>
+      <label style={S.fieldLabel}>実際の残（分）</label>
+      <input
+        type="number"
+        inputMode="numeric"
+        placeholder="例: 5760"
+        value={actual}
+        onChange={(e) => setActual(e.target.value)}
+        style={S.input}
+      />
+      {actual !== "" && (
+        diff > 0 ? (
+          <p style={S.noteSmall}>→ 差分 <strong>{diff.toLocaleString()}分</strong> を「過去分一括消化」として登録します。</p>
+        ) : diff === 0 ? (
+          <p style={S.noteSmall}>すでに一致しています。調整は不要です。</p>
+        ) : (
+          <div style={S.errorBox}>
+            実際の残が計算上の残を超えています。付与を増やすことはできないので、
+            入職日・週の出勤日数・取得記録が正しいか確認してください。
+          </div>
+        )
+      )}
+      <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+        <button style={{ ...S.btnPrimary, marginTop: 0, opacity: busy || !valid ? 0.6 : 1 }} onClick={submit} disabled={busy || !valid}>
+          {busy ? "登録中…" : "この内容で調整する"}
+        </button>
+        <button style={{ ...S.btnGhost, padding: "12px 20px" }} onClick={onCancel}>キャンセル</button>
+      </div>
+    </div>
   );
 }
 

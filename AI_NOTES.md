@@ -14,7 +14,9 @@
 - パスワードを忘れた場合: 疑似メールなので再設定メールは使えない → 院長がFirebaseコンソールで旧ユーザー削除 → スタッフ管理の「アカウント再発行」→ migrateStaffData() で記録を新UIDへ自動引き継ぎ。
 
 ## データ構造（Firestore）
-- `staff/{uid}`: { name, role, loginId, joinDate "YYYY-MM-DD", workDaysPerWeek, dailyMinutes, minutesPerDay: {sun..sat: 分}, status?: "active"|"retired", retiredDate? }
+- `staff/{uid}`: { name, role, loginId, joinDate "YYYY-MM-DD", workDaysPerWeek, dailyMinutes, minutesPerDay: {sun..sat: 分}, status?: "active"|"retired", retiredDate?, employmentType?: "full"|"part", noGrantDates?: ["YYYY-MM-DD"] }
+  - employmentType: 常勤/非常勤（未設定は週5以上を常勤扱い。empTypeOf in StaffManager）。職員カードは常勤/非常勤でグループ表示・入職日順。
+  - noGrantDates: 出勤率8割未満で「付与なし」にした付与日。その年は0日付与、勤続段階は進む。スタッフ編集のチェックボックスで設定。
   - status="retired" は退職者。一覧・カレンダー・計画年休・管理簿・自動反映から除外され、本人ログインは「退職済み」でブロック。復帰は unretireStaff。完全削除は deleteStaffCompletely（記録ごと。Authはコンソールで別途削除）。
 - `staff/{uid}/leaveRecords/{id}`: { date, minutes, type: "normal"|"planned", memo, plannedId?, createdAt }
 - `notifications/{id}`: { staffUid, staffName, action, date, minutes, read, createdAt }
@@ -35,6 +37,7 @@
 - 院長タブ: 🏠ホーム(要対応・30日以内の予定) / 職員(カードUI・年5日義務バー) / カレンダー(同日重複⚠) / 計画年休 / 通知 / スタッフ管理(退職・復帰・完全削除) / 🖨管理簿
 - 本人画面プレビュー: 職員の申請履歴から「👀 本人画面を開く」→ ログアウトせずStaffViewを院長が閲覧・入力できる（StaffViewのimpersonated prop。通知なし・パスワード変更カード非表示）。
 - 代理登録は連続入力（保存後もフォームが開いたまま・n件目表示）+「1日休み/半日」プリセット。
+- 残高合わせ: 履歴カードの「🧮 残高合わせ」で実際の残(分)を入力→差分を type:"adjust"（区分タグ「調整」・メモ「過去分一括消化」）の記録として今日の日付で1件登録。FIFOで古い有効付与から消化。年5日義務・ホームの取得予定には数えない。勤務歴の長いスタッフの過去記録を全部入れなくて済む（時効2年なので有効付与は最大2つしかない）。
 - 2025年末までは日単位運用だった（MINUTES_ERA_START="2026-01-01"）。それ以前の日付では日数モードに自動切替・分入力は無効・注意表示。過去分は「日数×平均分」で入れる（当時の実診療時間で入れると日単位の帳尻がずれる）。
 - 年次有給休暇管理簿の印刷（PrintLedger、createPortalでbody直下、.yk-printクラス。1人1ページ）
 - トースト+取消（登録・削除の直後に巻き戻せる。Toast.jsx）

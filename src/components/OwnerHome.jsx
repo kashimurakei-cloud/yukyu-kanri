@@ -51,7 +51,8 @@ export default function OwnerHome({ staffList, recordsByStaff, pendingPlanned, o
   const horizonStr = `${horizon.getFullYear()}-${String(horizon.getMonth() + 1).padStart(2, "0")}-${String(horizon.getDate()).padStart(2, "0")}`;
   for (const r of rows) {
     for (const rec of r.records) {
-      if (rec.date >= today && rec.date <= horizonStr) {
+      // 残高合わせの調整記録は「取得予定」ではないので出さない
+      if (rec.type !== "adjust" && rec.date >= today && rec.date <= horizonStr) {
         upcoming.push({ date: rec.date, name: r.s.name, minutes: rec.minutes, daily: r.bal.daily, type: rec.type });
       }
     }

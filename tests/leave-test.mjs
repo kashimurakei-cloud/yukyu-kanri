@@ -82,6 +82,26 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   check("いつ・何分オーバーしたか残る", after.overflowItems.length === 1 && after.overflowItems[0].date === "2026-06-30" && after.overflowItems[0].minutes === 480);
 }
 
+// 残高合わせの調整記録(type:"adjust"): 残高は減るが年5日義務には数えない
+{
+  const { fiveDayProgress } = await import("../src/lib/leave.js");
+  const staff = { joinDate: "2023-06-06", workDaysPerWeek: 5, dailyMinutes: 480 };
+  const records = [{ date: "2026-07-01", minutes: 5 * 480, type: "adjust" }];
+  const bal = calcBalance(staff, records, "2026-07-13");
+  check("調整は残高から消化される", bal.remainMin === (23 - 5) * 480);
+  const five = fiveDayProgress(staff, records, "2026-07-13");
+  check("調整は年5日義務に数えない", five.takenDays === 0);
+}
+
+// 付与なし設定(noGrantDates): その年は0日付与・勤続カウントは進む
+{
+  const staff = { joinDate: "2023-06-06", workDaysPerWeek: 5, dailyMinutes: 480, noGrantDates: ["2024-12-06"] };
+  const bal = calcBalance(staff, [], "2026-07-13");
+  check("付与なしの年は0日", bal.grants[1].skipped && bal.grants[1].days === 0);
+  check("有効付与 = 12日のみ（勤続段階は進む）", bal.grantedMin === 12 * 480);
+  check("残 = 12日", bal.remainMin === 12 * 480);
+}
+
 console.log("=== LEAVE: 時効警告もFIFO基準 ===");
 {
   // 初回付与が90日以内に時効を迎えるケース

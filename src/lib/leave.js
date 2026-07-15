@@ -54,7 +54,9 @@ export function weekdayKeyOf(dateStr) {
   return WEEKDAYS[d.getDay()].key;
 }
 
-export function calcGrants(joinDate, workDaysPerWeek, asOf = todayStr()) {
+// noGrantDates: 出勤率8割未満などで「付与なし」にした付与日(YYYY-MM-DD)の配列。
+// その年は0日付与になるが、勤続年数のカウント（テーブルの段階）は進む（労基法の扱い通り）。
+export function calcGrants(joinDate, workDaysPerWeek, asOf = todayStr(), noGrantDates = []) {
   if (!joinDate) return [];
   const wd = workDaysPerWeek >= 5 ? 5 : workDaysPerWeek;
   const table = GRANT_TABLE[wd];
@@ -64,11 +66,13 @@ export function calcGrants(joinDate, workDaysPerWeek, asOf = todayStr()) {
     const gd = grantDateAt(joinDate, i);
     if (gd > asOf) break;
     const days = table[Math.min(i, table.length - 1)];
+    const skipped = (noGrantDates || []).includes(gd);
     grants.push({
       index: i,
       label: i === 0 ? "6ヶ月" : `${i}年6ヶ月`,
       grantDate: gd,
-      days,
+      days: skipped ? 0 : days,
+      skipped,
     });
   }
   return grants;
@@ -122,7 +126,7 @@ function fifoConsume(grants, records) {
 // 時効消滅済みの付与にかかる取得は現在の残を減らさない。
 export function calcBalance(staff, records, asOf = todayStr()) {
   const daily = staff.dailyMinutes || 480;
-  const rawGrants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf);
+  const rawGrants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf, staff.noGrantDates || []);
   const grants = rawGrants.map((g) => ({ ...g, minutes: g.days * daily, expire: addMonths(g.grantDate, 24) }));
   const active = grants.filter((g) => g.expire > asOf);
   const grantedMin = active.reduce((s, g) => s + g.minutes, 0);
@@ -182,7 +186,7 @@ export function calcUpcomingPlanned(staff, plannedLeaves, asOf = todayStr()) {
    直近の基準日(付与日)から1年間で5日取得が義務(10日以上付与の職員)。
    計画年休も取得日数に数える。 */
 export function fiveDayProgress(staff, records, asOf = todayStr()) {
-  const grants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf);
+  const grants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf, staff.noGrantDates || []);
   if (grants.length === 0) return null;
   const g = grants[grants.length - 1]; // 直近の基準日
   if (g.days < 10) return null; // 義務の対象外
@@ -190,7 +194,8 @@ export function fiveDayProgress(staff, records, asOf = todayStr()) {
   const start = g.grantDate;
   const deadline = addMonths(start, 12);
   const takenMin = (records || [])
-    .filter((r) => r.date >= start && r.date < deadline)
+    // 残高合わせの調整記録(type:"adjust")は実取得ではないので年5日義務には数えない
+    .filter((r) => r.type !== "adjust" && r.date >= start && r.date < deadline)
     .reduce((s, r) => s + Number(r.minutes || 0), 0);
   const takenDays = takenMin / daily;
   const need = Math.max(0, 5 - takenDays);
@@ -209,7 +214,7 @@ export function fiveDayProgress(staff, records, asOf = todayStr()) {
    FIFO消化（各取得は取得日時点で有効だった付与から）後に残った分の失効予定を出す。 */
 export function expiringGrants(staff, records, asOf = todayStr(), withinDays = 90) {
   const daily = staff.dailyMinutes || 480;
-  const grants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf)
+  const grants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf, staff.noGrantDates || [])
     .map((g) => ({ ...g, minutes: g.days * daily, expire: addMonths(g.grantDate, 24) }));
   const { left } = fifoConsume(grants, records);
   const out = [];

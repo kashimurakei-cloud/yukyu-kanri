@@ -1,8 +1,14 @@
 import React, { useState } from "react";
 import { upsertStaff, migrateStaffData, retireStaff, unretireStaff, deleteStaffCompletely } from "../data";
 import { createStaffAccount } from "../firebase";
-import { WEEKDAYS, todayStr, fmt } from "../lib/leave";
+import { WEEKDAYS, todayStr, fmt, calcGrants } from "../lib/leave";
 import { S } from "../styles";
+
+// 常勤/非常勤（employmentType未設定の古いデータは週5以上を常勤とみなす）
+export function empTypeOf(s) {
+  return s.employmentType || (Number(s.workDaysPerWeek) >= 5 ? "full" : "part");
+}
+export const EMP_LABEL = { full: "常勤", part: "非常勤" };
 
 /*
   スタッフ管理：院長がスタッフの登録・編集を全て行う。
@@ -65,15 +71,25 @@ export default function StaffManager({ staffList, retiredList = [], onChanged })
             <thead>
               <tr>
                 <th style={S.th}>氏名</th>
+                <th style={S.th}>区分</th>
                 <th style={S.th}>入職日</th>
                 <th style={S.th}>週/1日</th>
                 <th style={S.th}></th>
               </tr>
             </thead>
             <tbody>
-              {staffList.map((s) => (
+              {[...staffList]
+                .sort((a, b) => {
+                  const t = (empTypeOf(a) === "full" ? 0 : 1) - (empTypeOf(b) === "full" ? 0 : 1);
+                  if (t !== 0) return t;
+                  return (a.joinDate || "") < (b.joinDate || "") ? -1 : 1;
+                })
+                .map((s) => (
                 <tr key={s.id}>
                   <td style={S.tdBold}>{s.name}</td>
+                  <td style={S.td}>
+                    <span style={empTypeOf(s) === "full" ? S.tagActive : S.tagPlan}>{EMP_LABEL[empTypeOf(s)]}</span>
+                  </td>
                   <td style={S.td}>{s.joinDate || "—"}</td>
                   <td style={S.td}>週{s.workDaysPerWeek}・{s.dailyMinutes}分</td>
                   <td style={S.td}>
@@ -260,6 +276,17 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
   const [joinDate, setJoinDate] = useState(initial?.joinDate || "");
   const [workDaysPerWeek, setWorkDaysPerWeek] = useState(initial?.workDaysPerWeek || 5);
   const [dailyMinutes, setDailyMinutes] = useState(initial?.dailyMinutes || 480);
+  const [employmentType, setEmploymentType] = useState(initial ? empTypeOf(initial) : "full");
+  const [noGrantDates, setNoGrantDates] = useState(initial?.noGrantDates || []);
+
+  // これまでの付与日一覧（付与なし設定のチェックボックス用）
+  const grantDates = isEdit && joinDate
+    ? calcGrants(joinDate, Number(workDaysPerWeek), todayStr(), []).map((g) => ({ date: g.grantDate, label: g.label, days: g.days }))
+    : [];
+
+  function toggleNoGrant(gd) {
+    setNoGrantDates((prev) => prev.includes(gd) ? prev.filter((d) => d !== gd) : [...prev, gd]);
+  }
   const [minutesPerDay, setMinutesPerDay] = useState(
     initial?.minutesPerDay || { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, sun: 0 }
   );
@@ -292,6 +319,8 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
         workDaysPerWeek: Number(workDaysPerWeek),
         dailyMinutes: Number(dailyMinutes),
         minutesPerDay,
+        employmentType,
+        noGrantDates,
       };
       if (isEdit) {
         await upsertStaff(initial.id, staffData);
@@ -398,6 +427,12 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
         </div>
       </div>
 
+      <label style={S.fieldLabel}>雇用区分（一覧の並び順に使います）</label>
+      <div style={S.quickRow}>
+        <button type="button" style={employmentType === "full" ? S.quickBtnOn : S.quickBtn} onClick={() => setEmploymentType("full")}>常勤</button>
+        <button type="button" style={employmentType === "part" ? S.quickBtnOn : S.quickBtn} onClick={() => setEmploymentType("part")}>非常勤</button>
+      </div>
+
       <label style={S.fieldLabel}>
         曜日ごとの勤務分（計画年休の自動反映に使用）
         <span style={S.hint}>勤務しない曜日は0のままでOK。例：武田さん=火水金土に410。</span>
@@ -415,6 +450,27 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
           </div>
         ))}
       </div>
+
+      {isEdit && grantDates.length > 0 && (
+        <>
+          <label style={S.fieldLabel}>
+            付与なしの年（出勤率8割未満だった年にチェック）
+            <span style={S.hint}>チェックした付与日は0日付与になります。勤続年数のカウントは進みます。</span>
+          </label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {grantDates.map((g) => (
+              <label key={g.date} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
+                <input
+                  type="checkbox"
+                  checked={noGrantDates.includes(g.date)}
+                  onChange={() => toggleNoGrant(g.date)}
+                />
+                {fmt(g.date)}（{g.label}・本来{g.days}日）を付与なしにする
+              </label>
+            ))}
+          </div>
+        </>
+      )}
 
       {error && <div style={S.errorBox}>{error}</div>}
 

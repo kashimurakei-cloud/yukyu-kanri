@@ -12,7 +12,7 @@ export default function PrintLedger({ staffList, recordsByStaff }) {
       {staffList.map((s) => {
         const records = [...(recordsByStaff[s.id] || [])].sort((a, b) => (a.date < b.date ? -1 : 1));
         const bal = calcBalance(s, records);
-        const grants = calcGrants(s.joinDate, s.workDaysPerWeek);
+        const grants = calcGrants(s.joinDate, s.workDaysPerWeek, undefined, s.noGrantDates || []);
         const base = grants.length ? grants[grants.length - 1] : null; // 直近の基準日
         const five = fiveDayProgress(s, records);
         const daily = bal.daily;
@@ -63,7 +63,7 @@ export default function PrintLedger({ staffList, recordsByStaff }) {
                     <td className="c-no">{i + 1}</td>
                     <td>{fmt(r.date)}</td>
                     <td>{WD[new Date(r.date + "T00:00:00").getDay()]}</td>
-                    <td>{r.type === "planned" ? "計画年休" : "通常"}</td>
+                    <td>{r.type === "planned" ? "計画年休" : r.type === "adjust" ? "調整(過去分一括)" : "通常"}</td>
                     <td className="c-r">{r.minutes}分</td>
                     <td className="c-r">{(r.minutes / daily).toFixed(2)}日</td>
                     <td>{r.memo || ""}</td>

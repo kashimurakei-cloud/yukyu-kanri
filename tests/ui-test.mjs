@@ -224,6 +224,7 @@ try {
   console.log("Cards for both staff:", html.includes("佐藤 花子") && html.includes("鈴木 美咲"));
   console.log("残 display:", html.includes("日分"));
   console.log("分メイン表示（約x日分はカッコ）:", html.includes("残（約"));
+  console.log("常勤/非常勤グループ表示:", (html.match(/常勤/g) || []).length >= 2 && html.includes("非常勤"));
   console.log("年5日義務 bar:", html.includes("年5日義務"));
   console.log("⏳時効 chip on B:", html.includes("⏳"));
 
@@ -276,6 +277,24 @@ try {
   console.log("個別計画年休は編集・削除可能:", !!plannedRow && !!byText(plannedRow, "button", "編集") && !!byText(plannedRow, "button", "削除"));
   const ledgerRow = [...rootEl.querySelectorAll("tr")].find((tr) => tr.textContent.includes(`${Number(PAST_MON.split("-")[1])}/${Number(PAST_MON.split("-")[2])}`) && tr.textContent.includes("計画年休"));
   console.log("台帳配布の計画年休は編集不可:", !ledgerRow || !byText(ledgerRow, "button", "編集"));
+
+  /* 残高合わせ（過去分の一括消化） */
+  console.log("=== OWNER: 残高合わせ ===");
+  click(byText(histSec(), "button", "残高合わせ"));
+  await wait(250);
+  console.log("フォーム表示:", histSec().innerHTML.includes("実際の残"));
+  const adjInput = [...histSec().querySelectorAll('input[type="number"]')].pop();
+  setVal(adjInput, "0");
+  await wait(200);
+  console.log("差分プレビュー:", histSec().innerHTML.includes("過去分一括消化"));
+  click(byText(histSec(), "button", "この内容で調整する"));
+  await wait(900);
+  const adjRec = globalThis.__DB["staff/u-a/leaveRecords"].find((r) => r.type === "adjust");
+  console.log("調整記録が追加される:", !!adjRec && adjRec.minutes > 0);
+  console.log("区分タグ「調整」:", rootEl.innerHTML.includes("調整"));
+  click(byText(rootEl, "button", "取消"));
+  await wait(800);
+  console.log("トースト取消で戻る:", !globalThis.__DB["staff/u-a/leaveRecords"].some((r) => r.type === "adjust"));
 
   /* 本人画面プレビュー（院長モード・ログアウト不要） */
   console.log("=== OWNER: IMPERSONATION PREVIEW ===");
@@ -473,6 +492,17 @@ try {
   click(byText(rootEl, "button", "このスタッフを完全削除する"));
   await wait(900);
   console.log("Completely deleted:", !globalThis.__DB["staff"].some((s) => s.name === "田中 三奈"));
+
+  /* 雇用区分と付与なし設定 */
+  console.log("=== OWNER: EMP TYPE & NO-GRANT ===");
+  const rowB = [...rootEl.querySelectorAll("tr")].find((tr) => tr.textContent.includes("鈴木 美咲"));
+  click(byText(rowB, "button", "編集"));
+  await wait(300);
+  html = rootEl.innerHTML;
+  console.log("雇用区分ボタン:", html.includes("雇用区分") && html.includes("非常勤"));
+  console.log("付与なし設定の一覧:", html.includes("付与なしの年") && html.includes("を付与なしにする"));
+  click(byText(rootEl, "button", "キャンセル"));
+  await wait(200);
 
   /* 手順書モーダル */
   console.log("=== OWNER: REISSUE GUIDE ===");

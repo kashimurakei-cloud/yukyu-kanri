@@ -56,7 +56,7 @@ export default function StaffView({ me, impersonated = false }) {
 
   // 本人が取り消せるのは「未来日（取得日が今日より後）の通常取得」だけ
   function canCancel(r) {
-    return r.type !== "planned" && r.date > todayStr();
+    return r.type !== "planned" && r.type !== "adjust" && r.date > todayStr();
   }
   async function handleCancel(r) {
     if (!canCancel(r)) return;
@@ -195,8 +195,8 @@ export default function StaffView({ me, impersonated = false }) {
                 <tr key={r.id}>
                   <td style={S.td}>{fmtW(r.date)}</td>
                   <td style={S.td}>
-                    <span style={r.type === "planned" ? S.tagPlan : S.tagNormal}>
-                      {r.type === "planned" ? "計画年休" : "通常"}
+                    <span style={r.type === "planned" ? S.tagPlan : r.type === "adjust" ? S.tagExpired : S.tagNormal}>
+                      {r.type === "planned" ? "計画年休" : r.type === "adjust" ? "調整" : "通常"}
                     </span>
                   </td>
                   <td style={S.tdR}>
@@ -468,6 +468,17 @@ function GrantsCard({ bal }) {
                 const isActive = bal.active.some((a) => a.grantDate === g.grantDate);
                 const first = g.alloc?.[0];
                 const last = g.alloc?.[g.alloc.length - 1];
+                if (g.skipped) {
+                  return (
+                    <tr key={g.grantDate}>
+                      <td style={S.td}>{fmt(g.grantDate)}</td>
+                      <td style={S.td}>{g.label}</td>
+                      <td style={S.tdR}>0分</td>
+                      <td style={S.td}>—</td>
+                      <td style={S.td}><span style={S.tagExpired}>付与なし</span></td>
+                    </tr>
+                  );
+                }
                 return (
                   <tr key={g.grantDate}>
                     <td style={S.td}>{fmt(g.grantDate)}</td>
