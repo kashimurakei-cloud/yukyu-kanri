@@ -13,7 +13,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { weekdayKeyOf, todayStr } from "./lib/leave";
+import { weekdayKeyOf, todayStr, calcBalance, empTypeOf } from "./lib/leave";
 
 /* ---------- スタッフ ---------- */
 export async function getStaff(uid) {
@@ -177,13 +177,16 @@ export async function applyDuePlannedLeaves(allStaff, asOf = todayStr()) {
   const appliedSummaries = [];
   if (due.length === 0) return appliedSummaries;
 
-  // スタッフごとの反映済plannedIdを一括取得（1人1回の読み取りで済ませる）
+  // スタッフごとの記録と反映済plannedIdを一括取得（1人1回の読み取りで済ませる）
   const havePlanned = {};
+  const recsByStaff = {};
   for (const s of staffOnly) {
     const recs = await getLeaveRecords(s.id);
+    recsByStaff[s.id] = recs;
     havePlanned[s.id] = new Set(recs.map((r) => r.plannedId).filter(Boolean));
   }
 
+  const skippedShort = []; // 残不足で反映しなかった人（特別休暇/休業手当で対応してもらう）
   for (const p of due) {
     for (const s of staffOnly) {
       if (s.joinDate && p.date < s.joinDate) continue; // 入職前の計画年休は対象外
@@ -191,6 +194,17 @@ export async function applyDuePlannedLeaves(allStaff, asOf = todayStr()) {
       const m = s.minutesPerDay?.[key] ?? 0;
       if (m <= 0) continue;
       if (havePlanned[s.id].has(p.id)) continue;
+      // 反映しないケース（取得しすぎ・超過を出さない）:
+      // ① まだ一度も付与されていない人（入職6ヶ月未満・付与なし設定のみ）→ 常勤/非常勤とも
+      // ② 非常勤で、その日時点の残が足りない人
+      // 常勤で付与済みの人は不足でも反映し、超過分は別枠（overflowMin）で警告される。
+      const recsBefore = recsByStaff[s.id].filter((r) => r.date <= p.date);
+      const balAt = calcBalance(s, recsBefore, p.date);
+      const noGrantYet = balAt.grantedMin <= 0;
+      if (noGrantYet || (empTypeOf(s) === "part" && balAt.remainMin < m)) {
+        skippedShort.push({ staffName: s.name, date: p.date });
+        continue;
+      }
       await addLeaveRecord(
         s.id,
         s.name,
@@ -198,10 +212,28 @@ export async function applyDuePlannedLeaves(allStaff, asOf = todayStr()) {
         false
       );
       havePlanned[s.id].add(p.id);
+      recsByStaff[s.id].push({ date: p.date, minutes: m, type: "planned", plannedId: p.id });
       appliedSummaries.push({ staffName: s.name, date: p.date, minutes: m });
     }
     if (p.status !== "applied") {
       await updateDoc(doc(db, "plannedLeaves", p.id), { status: "applied" });
+    }
+  }
+
+  if (skippedShort.length > 0) {
+    const byDate = {};
+    for (const x of skippedShort) {
+      byDate[x.date] = byDate[x.date] || [];
+      byDate[x.date].push(x.staffName);
+    }
+    for (const date of Object.keys(byDate)) {
+      await addNotification({
+        staffUid: "",
+        staffName: "計画年休",
+        action: date + " の計画年休: " + byDate[date].join("・") + " は残不足（または未付与）のため反映していません",
+        date,
+        minutes: 0,
+      });
     }
   }
 

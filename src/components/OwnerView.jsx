@@ -783,7 +783,7 @@ function PlannedTab({ plannedLeaves, onAdd, onDelete, onCancelApplied, staffList
       const bal = calcBalance(s, recordsByStaff[s.id] || []);
       const up = calcUpcomingPlanned(s, pending);
       const afterMin = bal.remainMin - up.minutes - m;
-      return { name: s.name, m, daily: bal.daily, afterMin };
+      return { name: s.name, m, daily: bal.daily, afterMin, isPart: empTypeOf(s) === "part", noGrant: bal.grantedMin <= 0 };
     })
     .filter((x) => x.m > 0);
 
@@ -827,9 +827,15 @@ function PlannedTab({ plannedLeaves, onAdd, onDelete, onCancelApplied, staffList
                   <div key={a.name} style={S.affectRow}>
                     <span>{a.name}（{a.m}分）</span>
                     <span style={{ fontWeight: 700, color: low ? "#b4341f" : warn ? "#b07a1f" : "#2f6358" }}>
-                      反映後 {a.afterMin.toLocaleString()}分（約{(a.afterMin / a.daily).toFixed(1)}日分）
-                      {low && <span style={S.warnTag}>不足</span>}
-                      {warn && <span style={S.cautionTag}>5日割れ</span>}
+                      {a.noGrant || (low && a.isPart) ? (
+                        <>反映されません（{a.noGrant ? "未付与" : "残不足"}）</>
+                      ) : (
+                        <>
+                          反映後 {a.afterMin.toLocaleString()}分（約{(a.afterMin / a.daily).toFixed(1)}日分）
+                          {low && <span style={S.warnTag}>不足（超過扱い）</span>}
+                          {warn && <span style={S.cautionTag}>5日割れ</span>}
+                        </>
+                      )}
                     </span>
                   </div>
                 );
@@ -848,7 +854,8 @@ function PlannedTab({ plannedLeaves, onAdd, onDelete, onCancelApplied, staffList
           {busy ? "登録中…" : "予定として登録する"}
         </button>
         <p style={S.noteSmall}>
-          「不足」「5日割れ」が出た人は、計画年休ではなく特別休暇などの対応を検討してください（アプリは自動では切り替えません）。
+          残が足りない非常勤と、まだ付与されていない人には自動的に反映されません（日付が来たときに通知でお知らせします）。
+          常勤は不足でも反映され、超過分は別枠で警告されます。
         </p>
       </section>
 

@@ -158,6 +158,19 @@ export function calcBalance(staff, records, asOf = todayStr()) {
   };
 }
 
+// 常勤/非常勤（employmentType未設定の古いデータは週5以上を常勤とみなす）
+export function empTypeOf(s) {
+  return s.employmentType || (Number(s.workDaysPerWeek) >= 5 ? "full" : "part");
+}
+export const EMP_LABEL = { full: "常勤", part: "非常勤" };
+
+// その日時点で使える残（その日以前の記録だけで計算）。
+// 計画年休の反映時に「残が足りないパートには充てない」判定に使う。
+export function availableAt(staff, records, date) {
+  const recs = (records || []).filter((r) => r.date <= date);
+  return calcBalance(staff, recs, date).remainMin;
+}
+
 // このスタッフが、指定された計画年休「予定」のうち
 // 次回付与日までに引かれる見込み分（分）を計算する。
 // plannedLeaves: [{date, ...}] の配列（pendingな予定。台帳）

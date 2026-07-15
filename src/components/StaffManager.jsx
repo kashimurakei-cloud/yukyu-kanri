@@ -1,14 +1,10 @@
 import React, { useState } from "react";
 import { upsertStaff, migrateStaffData, retireStaff, unretireStaff, deleteStaffCompletely } from "../data";
 import { createStaffAccount } from "../firebase";
-import { WEEKDAYS, todayStr, fmt, calcGrants } from "../lib/leave";
+import { WEEKDAYS, todayStr, fmt, calcGrants, empTypeOf, EMP_LABEL } from "../lib/leave";
 import { S } from "../styles";
 
-// 常勤/非常勤（employmentType未設定の古いデータは週5以上を常勤とみなす）
-export function empTypeOf(s) {
-  return s.employmentType || (Number(s.workDaysPerWeek) >= 5 ? "full" : "part");
-}
-export const EMP_LABEL = { full: "常勤", part: "非常勤" };
+export { empTypeOf, EMP_LABEL }; // 既存のimport元互換のため再エクスポート
 
 /*
   スタッフ管理：院長がスタッフの登録・編集を全て行う。

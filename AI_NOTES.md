@@ -22,6 +22,7 @@
 - `notifications/{id}`: { staffUid, staffName, action, date, minutes, read, createdAt }
 - `plannedLeaves/{id}`: { date, memo, status: "pending"|"applied", createdAt }（計画年休の予約。到来分は起動時に applyDuePlannedLeaves で全スタッフの記録へ自動反映）
   - applyDuePlannedLeavesは冪等: 反映済も毎回チェックし、後から登録/曜日設定したスタッフに追い反映（plannedIdで重複防止・入職前日付はスキップ・退職者除外）。
+  - 反映しないケース: ①未付与(その日時点でgrantedMin=0。入職6ヶ月未満・付与なし設定のみ)は常勤/非常勤とも、②非常勤で残不足。スキップ時は通知「残不足（または未付与）のため反映していません」（対応指示の文言は入れない方針）。常勤で付与済みは不足でも反映し超過は別枠警告。プレビューに「反映されません（未付与/残不足）」表示。
   - 反映済の取消は cancelPlannedLeave（全スタッフのplannedId一致記録を削除して残高を戻し、予定も削除）。計画年休タブの「取消して記録も戻す」。
   - 代理登録で区分=計画年休にした記録は個人だけのもの（plannedIdなし・台帳に載らない）。plannedIdなしの計画年休記録は履歴から編集・削除できる。
 

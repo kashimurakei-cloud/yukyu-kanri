@@ -5,7 +5,7 @@
 ============================================================ */
 process.env.TZ = "Asia/Tokyo";
 
-const { addMonths, todayStr, calcBalance, expiringGrants } = await import("../src/lib/leave.js");
+const { addMonths, todayStr, calcBalance, expiringGrants, availableAt, empTypeOf } = await import("../src/lib/leave.js");
 
 let pass = 0, fail = 0;
 function check(label, cond) {
@@ -100,6 +100,19 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   check("付与なしの年は0日", bal.grants[1].skipped && bal.grants[1].days === 0);
   check("有効付与 = 12日のみ（勤続段階は進む）", bal.grantedMin === 12 * 480);
   check("残 = 12日", bal.remainMin === 12 * 480);
+}
+
+// availableAt: その日以前の記録だけで判定（計画年休の残不足スキップ用）
+{
+  const staff = { joinDate: "2025-01-01", workDaysPerWeek: 5, dailyMinutes: 480 };
+  const records = [{ date: "2025-08-01", minutes: 4800 }];
+  check("使い切った後の日付では0", availableAt(staff, records, "2025-09-01") === 0);
+  check("使う前の日付なら満額", availableAt(staff, records, "2025-07-15") === 4800);
+}
+// empTypeOf: 計画年休スキップは非常勤のみ
+{
+  check("employmentType優先", empTypeOf({ employmentType: "part", workDaysPerWeek: 5 }) === "part");
+  check("未設定は週5以上=常勤", empTypeOf({ workDaysPerWeek: 5 }) === "full" && empTypeOf({ workDaysPerWeek: 3 }) === "part");
 }
 
 console.log("=== LEAVE: 時効警告もFIFO基準 ===");
