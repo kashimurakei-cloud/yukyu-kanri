@@ -69,6 +69,18 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   check("半日×2 = 1日消化", bal.remainMin === 9 * 480);
 }
 
+// 超過の表示期限: 新しい付与が来たら recentOverflowMin は0になる（累計overflowMinは残る）
+{
+  const staff = { joinDate: "2025-01-01", workDaysPerWeek: 5, dailyMinutes: 480 };
+  // 初回付与 2025-07-01(10日=4800分)。2026-06-30に5280分取得 → 480分超過
+  const records = [{ date: "2026-06-30", minutes: 5280 }];
+  const before = calcBalance(staff, records, "2026-06-30"); // 2回目付与(2026-07-01)前
+  check("付与前: 超過は今期分として表示", before.recentOverflowMin === 480 && before.overflowMin === 480);
+  const after = calcBalance(staff, records, "2026-08-01"); // 2回目付与後
+  check("新付与後: スタッフ向け超過は消える", after.recentOverflowMin === 0);
+  check("累計の超過は院長向けに残る", after.overflowMin === 480);
+}
+
 console.log("=== LEAVE: 時効警告もFIFO基準 ===");
 {
   // 初回付与が90日以内に時効を迎えるケース

@@ -125,11 +125,11 @@ export default function StaffView({ me, impersonated = false }) {
             ))}
           </div>
         )}
-        {bal.overflowMin > 0 && (
+        {bal.recentOverflowMin > 0 && (
           <div style={{ ...S.forecastBox, background: "rgba(255,180,165,0.35)" }}>
             <div style={S.forecastRow}>
               <span>⚠ 超過取得（有給残とは別枠・院長が別途対応）</span>
-              <span style={{ fontWeight: 800 }}>{bal.overflowMin}分</span>
+              <span style={{ fontWeight: 800 }}>{bal.recentOverflowMin}分</span>
             </div>
           </div>
         )}

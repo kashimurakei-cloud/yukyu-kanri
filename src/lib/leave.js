@@ -92,6 +92,7 @@ function fifoConsume(grants, records) {
   const left = grants.map((g) => g.minutes);
   const alloc = grants.map(() => []); // 各付与から「いつ・何分」消化されたか
   let overflow = 0;
+  const overflowItems = []; // いつ・何分の超過だったか
   const recs = [...(records || [])].sort((a, b) => (a.date < b.date ? -1 : 1));
   for (const r of recs) {
     let need = Number(r.minutes || 0);
@@ -104,9 +105,10 @@ function fifoConsume(grants, records) {
         if (take > 0) alloc[i].push({ date: r.date, minutes: take });
       }
     }
+    if (need > 0) overflowItems.push({ date: r.date, minutes: need });
     overflow += need;
   }
-  return { left, overflow, alloc };
+  return { left, overflow, alloc, overflowItems };
 }
 
 // 残数計算（時効2年・FIFO消化）。付与分 = 付与日数 × その人の1日分。
@@ -119,7 +121,7 @@ export function calcBalance(staff, records, asOf = todayStr()) {
   const active = grants.filter((g) => g.expire > asOf);
   const grantedMin = active.reduce((s, g) => s + g.minutes, 0);
   const usedMin = (records || []).reduce((s, r) => s + Number(r.minutes || 0), 0);
-  const { left, overflow, alloc } = fifoConsume(grants, records);
+  const { left, overflow, alloc, overflowItems } = fifoConsume(grants, records);
   let remainMin = 0;
   let lapsedMin = 0; // 時効消滅した未消化分
   grants.forEach((g, i) => {
@@ -130,9 +132,15 @@ export function calcBalance(staff, records, asOf = todayStr()) {
     if (g.expire > asOf) remainMin += left[i];
     else lapsedMin += left[i];
   });
-  // overflowMin: どの付与からも引けなかった取得分（残高オーバー）。
+  // overflowMin: どの付与からも引けなかった取得分（残高オーバー）の累計。
   // 有給残とは相殺しない（翌年付与から引いたりしない）。別枠で表示し、給与側で対応する運用。
-  return { grants, active, grantedMin, usedMin, remainMin, lapsedMin, overflowMin: overflow, daily };
+  // recentOverflowMin: 直近の付与日以降に発生した超過。スタッフ画面と要対応はこちらを使い、
+  // 新しい付与が来たら古い超過は表示から消える（院長の履歴カードには累計を残す）。
+  const lastGrantDate = grants.length > 0 ? grants[grants.length - 1].grantDate : null;
+  const recentOverflowMin = (overflowItems || [])
+    .filter((o) => !lastGrantDate || o.date >= lastGrantDate)
+    .reduce((s, o) => s + o.minutes, 0);
+  return { grants, active, grantedMin, usedMin, remainMin, lapsedMin, overflowMin: overflow, recentOverflowMin, daily };
 }
 
 // このスタッフが、指定された計画年休「予定」のうち
