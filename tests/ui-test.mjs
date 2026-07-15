@@ -172,6 +172,15 @@ globalThis.alert = () => {};
 globalThis.confirm = () => true;
 dom.window.alert = () => {};
 dom.window.confirm = () => true;
+globalThis.__pinInput = "0000";
+globalThis.prompt = () => globalThis.__pinInput;
+dom.window.prompt = () => globalThis.__pinInput;
+globalThis.__blobDownloads = 0;
+const mockCreateObjectURL = () => { globalThis.__blobDownloads++; return "blob:mock"; };
+dom.window.URL.createObjectURL = mockCreateObjectURL;
+dom.window.URL.revokeObjectURL = () => {};
+globalThis.URL.createObjectURL = mockCreateObjectURL; // バンドル内のグローバルURL用
+globalThis.URL.revokeObjectURL = () => {};
 globalThis.__printed = 0;
 dom.window.print = () => { globalThis.__printed++; };
 
@@ -500,13 +509,24 @@ try {
   await wait(900);
   console.log("Restore to active:", globalThis.__DB["staff"].find((s) => s.name === "田中 三奈")?.status === "active");
 
-  // 完全削除（記録ごと）
+  // 完全削除（記録ごと）: 暗証番号が違うと削除されない
   rowMina = [...rootEl.querySelectorAll("tr")].find((tr) => tr.textContent.includes("田中 三奈"));
   click(byText(rowMina, "button", "編集"));
   await wait(300);
+  globalThis.__pinInput = "1111"; // 間違ったPIN
+  click(byText(rootEl, "button", "このスタッフを完全削除する"));
+  await wait(700);
+  console.log("PIN違いは削除されない:", globalThis.__DB["staff"].some((s) => s.name === "田中 三奈"));
+  globalThis.__pinInput = "0000"; // 正しいPIN
   click(byText(rootEl, "button", "このスタッフを完全削除する"));
   await wait(900);
   console.log("Completely deleted:", !globalThis.__DB["staff"].some((s) => s.name === "田中 三奈"));
+
+  // バックアップのダウンロード
+  console.log("=== OWNER: BACKUP ===");
+  click(byText(rootEl, "button", "バックアップ"));
+  await wait(700);
+  console.log("バックアップがダウンロードされる:", globalThis.__blobDownloads >= 1);
 
   /* 雇用区分と付与なし設定 */
   console.log("=== OWNER: EMP TYPE & NO-GRANT ===");

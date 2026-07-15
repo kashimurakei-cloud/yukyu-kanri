@@ -1,10 +1,12 @@
 import React, { useState } from "react";
-import { upsertStaff, migrateStaffData, retireStaff, unretireStaff, deleteStaffCompletely } from "../data";
+import { upsertStaff, migrateStaffData, retireStaff, unretireStaff, deleteStaffCompletely, exportAllData } from "../data";
 import { createStaffAccount } from "../firebase";
 import { WEEKDAYS, todayStr, fmt, calcGrants, empTypeOf, EMP_LABEL } from "../lib/leave";
 import { S } from "../styles";
 
 export { empTypeOf, EMP_LABEL }; // 既存のimport元互換のため再エクスポート
+
+const DELETE_PIN = "0000"; // 完全削除の暗証番号（変えたいときはここを書き換える）
 
 /*
   スタッフ管理：院長がスタッフの登録・編集を全て行う。
@@ -18,6 +20,25 @@ export default function StaffManager({ staffList, retiredList = [], onChanged })
   const [creating, setCreating] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
 
+  // 全データをJSONファイルでダウンロード（バックアップ）
+  async function handleBackup() {
+    try {
+      const data = await exportAllData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `yukyu-backup-${todayStr()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert("バックアップの作成に失敗しました。");
+    }
+  }
+
   async function handleUnretire(s) {
     if (!window.confirm(`${s.name} さんを在籍に戻しますか?`)) return;
     await unretireStaff(s.id);
@@ -28,7 +49,12 @@ export default function StaffManager({ staffList, retiredList = [], onChanged })
     if (!window.confirm(
       `${s.name} さんを完全に削除します。\n取得記録もすべて消え、元に戻せません。\n（退職しただけなら「退職にする」を使ってください）\n\n本当に削除しますか?`
     )) return false;
-    if (!window.confirm(`最終確認: ${s.name} さんのデータを完全削除します。よろしいですか?`)) return false;
+    const pin = window.prompt("完全削除の暗証番号を入力してください");
+    if (pin === null) return false;
+    if (pin !== DELETE_PIN) {
+      alert("暗証番号が違います。削除を中止しました。");
+      return false;
+    }
     try {
       await deleteStaffCompletely(s.id);
       onChanged();
@@ -50,7 +76,10 @@ export default function StaffManager({ staffList, retiredList = [], onChanged })
       <section style={S.card}>
         <div style={S.notifHead}>
           <h2 style={S.cardTitle}>スタッフ管理</h2>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={S.btnGhost} onClick={handleBackup}>
+              💾 バックアップ
+            </button>
             <button style={S.btnGhost} onClick={() => setShowGuide(true)}>
               📖 再発行の手順書
             </button>

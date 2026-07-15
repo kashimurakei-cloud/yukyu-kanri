@@ -634,8 +634,12 @@ function AttendanceSection({ staff, onClose }) {
 
       <div className="grid2" style={S.grid2}>
         <div>
-          <label style={S.fieldLabel}>月</label>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} style={S.input} />
+          <label style={S.fieldLabel}>月（◀▶で前後の月へ。保存すると自動で翌月に進みます）</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button type="button" style={S.btnGhost} onClick={() => setMonth(addMonths(month + "-01", -1).slice(0, 7))}>◀</button>
+            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ ...S.input, flex: 1 }} />
+            <button type="button" style={S.btnGhost} onClick={() => setMonth(addMonths(month + "-01", 1).slice(0, 7))}>▶</button>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <div style={{ flex: 1 }}>

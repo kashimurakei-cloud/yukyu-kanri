@@ -118,6 +118,28 @@ export async function deleteAttendance(uid, month) {
   await deleteDoc(doc(db, "staff", uid, "attendance", month));
 }
 
+/* ---------- バックアップ ----------
+   全データ（スタッフ・取得記録・勤怠・計画年休・通知）をまとめて返す。
+   院長画面の「💾 バックアップ」でJSONファイルとしてダウンロードされる。 */
+export async function exportAllData() {
+  const staff = await getAllStaff();
+  const out = {
+    app: "yukyu-kanri",
+    exportedAt: new Date().toISOString(),
+    staff: [],
+    plannedLeaves: await getPlannedLeaves(),
+    notifications: await getNotifications(),
+  };
+  for (const s of staff) {
+    out.staff.push({
+      ...s,
+      leaveRecords: await getLeaveRecords(s.id),
+      attendance: s.role === "staff" ? await getAttendance(s.id) : [],
+    });
+  }
+  return out;
+}
+
 /* ---------- 通知（院長のみ） ---------- */
 export async function getNotifications() {
   const q = query(collection(db, "notifications"), orderBy("createdAt", "desc"));
