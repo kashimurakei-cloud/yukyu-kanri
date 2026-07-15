@@ -59,6 +59,7 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   const records = [{ date: "2025-06-01", minutes: 480 }]; // 初回付与(2025-07-01)より前
   const bal = calcBalance(staff, records, "2026-06-01");
   check("付与前取得は残から控除", bal.remainMin === 9 * 480);
+  check("超過分がoverflowMinで見える", bal.overflowMin === 480);
 }
 // 半日取得の端数もFIFOで正しく引ける
 {

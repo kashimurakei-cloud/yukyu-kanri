@@ -385,6 +385,16 @@ try {
   console.log("休診日はボタン非表示:", !/1日（\d+分）/.test(html));
   console.log("休診日の案内と自由入力:", html.includes("勤務日ではありません") && html.includes("分数を直接入力"));
 
+  /* 残高オーバーの入力時警告 */
+  console.log("=== STAFF: 残高オーバー警告 ===");
+  const minInput = [...root2.querySelectorAll('input[type="number"]')][0];
+  setVal(minInput, "99999");
+  await wait(200);
+  console.log("超過警告が出る:", root2.innerHTML.includes("超えています"));
+  setVal(minInput, "");
+  await wait(150);
+  console.log("戻すと警告が消える:", !root2.innerHTML.includes("超えています"));
+
   /* ========== パスワード変更(スタッフ側) ========== */
   console.log("=== STAFF: PASSWORD ===");
   html = root2.innerHTML;

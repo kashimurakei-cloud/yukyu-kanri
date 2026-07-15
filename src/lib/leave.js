@@ -131,7 +131,8 @@ export function calcBalance(staff, records, asOf = todayStr()) {
     else lapsedMin += left[i];
   });
   remainMin = Math.max(0, remainMin - overflow);
-  return { grants, active, grantedMin, usedMin, remainMin, lapsedMin, daily };
+  // overflowMin: どの付与からも引けなかった取得分（残高オーバー）。表示で警告に使う。
+  return { grants, active, grantedMin, usedMin, remainMin, lapsedMin, overflowMin: overflow, daily };
 }
 
 // このスタッフが、指定された計画年休「予定」のうち

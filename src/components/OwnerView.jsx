@@ -250,6 +250,7 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 8 }}>
+                  {bal.overflowMin > 0 && <span style={S.warnTag}>⚠超過{bal.overflowMin}分</span>}
                   {low && <span style={S.warnTag}>残不足見込み</span>}
                   {warn5 && <span style={S.cautionTag}>5日割れ見込み</span>}
                   {expiring.map((e, i) => (
@@ -402,6 +403,12 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
         <Stat label="取得済" main={`${bal.usedMin.toLocaleString()}分`} sub={`約${(bal.usedMin / daily).toFixed(1)}日分`} />
         <Stat label="次回付与" main={ng ? fmt(ng.grantDate) : "—"} sub={ng ? `${ng.days}日` : ""} />
       </div>
+      {bal.overflowMin > 0 && (
+        <div style={S.errorBox}>
+          ⚠ 付与を超えて取得した分が {bal.overflowMin}分 あります（残から差し引き済み）。
+          取得記録の分数が正しいか確認してください（2025年以前の半日は240分・1日は480分）。
+        </div>
+      )}
       <h3 style={S.subTitle}>取得履歴</h3>
       {sorted.length === 0 ? (
         <p style={S.empty}>取得記録はありません。</p>
@@ -454,7 +461,7 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
             ＋ 院長が代理で取得を登録（過去分の入力にも）
           </button>
         ) : (
-          <ProxyAddForm staff={staff} onAdd={handleProxyAdd} onCancel={() => setShowProxy(false)} />
+          <ProxyAddForm staff={staff} onAdd={handleProxyAdd} onCancel={() => setShowProxy(false)} remainMin={bal.remainMin} />
         )}
       </div>
 
@@ -475,7 +482,7 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
 // 2025年末までは日単位運用だったため、それ以前の日付では日数モードに自動切替＋注意を出す。
 // （付与も取得も同じ平均分で換算すれば日単位の帳尻が合う。当時の実診療時間で入れるとずれる）
 const MINUTES_ERA_START = "2026-01-01"; // 分単位で取れるようになった日
-function ProxyAddForm({ staff, onAdd, onCancel }) {
+function ProxyAddForm({ staff, onAdd, onCancel, remainMin = Infinity }) {
   const daily = staff.dailyMinutes || 480;
   const [date, setDate] = useState(todayStr());
   const [mode, setMode] = useState("days"); // "days" or "minutes"
@@ -580,6 +587,12 @@ function ProxyAddForm({ staff, onAdd, onCancel }) {
           <input type="number" value={minutes} onChange={(e) => setMinutes(e.target.value)} style={S.input} />
           <p style={S.noteSmall}>→ {(computedMin / daily).toFixed(1)}日分</p>
         </>
+      )}
+
+      {computedMin > remainMin && (
+        <div style={S.errorBox}>
+          ⚠ {computedMin}分は現在の残り{remainMin}分を超えています（過去分の入力では、その日時点の付与から引かれるため問題ない場合もあります）。
+        </div>
       )}
 
       <label style={S.fieldLabel}>メモ（任意）</label>

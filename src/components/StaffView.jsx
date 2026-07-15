@@ -125,6 +125,14 @@ export default function StaffView({ me, impersonated = false }) {
             ))}
           </div>
         )}
+        {bal.overflowMin > 0 && (
+          <div style={{ ...S.forecastBox, background: "rgba(255,180,165,0.35)" }}>
+            <div style={S.forecastRow}>
+              <span>⚠ 付与を超えて取得した分（残から差し引き済み）</span>
+              <span style={{ fontWeight: 800 }}>−{bal.overflowMin}分</span>
+            </div>
+          </div>
+        )}
         <div style={S.heroMeta}>
           <span>付与合計 {bal.grantedMin.toLocaleString()}分（約{(bal.grantedMin / daily).toFixed(1)}日分）</span>
           <span style={S.dot}>•</span>
@@ -158,7 +166,7 @@ export default function StaffView({ me, impersonated = false }) {
       )}
 
       <div className="grid2" style={S.grid2}>
-        <AddRecordCard staff={me} onAdd={handleAdd} records={records} />
+        <AddRecordCard staff={me} onAdd={handleAdd} records={records} remainMin={bal.remainMin} />
         <GrantsCard bal={bal} />
       </div>
 
@@ -329,7 +337,7 @@ function MiniPickCal({ value, onPick, records }) {
   );
 }
 
-function AddRecordCard({ staff, onAdd, records }) {
+function AddRecordCard({ staff, onAdd, records, remainMin = Infinity }) {
   const [date, setDate] = useState(todayStr());
   const [minutes, setMinutes] = useState("");
   const [memo, setMemo] = useState("");
@@ -352,9 +360,16 @@ function AddRecordCard({ staff, onAdd, records }) {
     if (note && !memo) setMemo(note);
   }
 
+  // 入力中の分数が残りを超えていないか
+  const previewMin = Number(minutes || suggested) || 0;
+  const isOver = previewMin > 0 && previewMin > remainMin;
+
   async function submit() {
     const m = Number(minutes || suggested);
     if (!date || !m) return;
+    if (m > remainMin && !window.confirm(
+      `残り${remainMin}分を超えています（${m}分）。\nこのまま登録すると超過分は残から差し引かれます。登録しますか?`
+    )) return;
     setBusy(true);
     try {
       await onAdd({ date, minutes: m, type: "normal", memo });
@@ -407,6 +422,12 @@ function AddRecordCard({ staff, onAdd, records }) {
         onChange={(e) => setMinutes(e.target.value)}
         style={S.input}
       />
+
+      {isOver && (
+        <div style={S.errorBox}>
+          ⚠ 入力した{previewMin}分は、有給の残り{remainMin}分を超えています。
+        </div>
+      )}
 
       <label style={S.fieldLabel}>メモ（任意）</label>
       <input type="text" placeholder="午前 / 午後 など" value={memo} onChange={(e) => setMemo(e.target.value)} style={S.input} />
