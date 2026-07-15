@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { calcBalance, nextGrant, calcUpcomingPlanned, fiveDayProgress, expiringGrants, fmt, todayStr, weekdayKeyOf } from "../lib/leave";
+import { calcBalance, nextGrant, calcUpcomingPlanned, fiveDayProgress, expiringGrants, fmt, fmtW, todayStr, weekdayKeyOf } from "../lib/leave";
 import { getLeaveRecords, addLeaveRecord, getPlannedLeaves, deleteLeaveRecord } from "../data";
 import { changePassword } from "../firebase";
 import Toast from "./Toast";
@@ -155,7 +155,7 @@ export default function StaffView({ me, impersonated = false }) {
           <ul style={S.plainList}>
             {upcoming.items.map((it) => (
               <li key={it.date} style={S.plainItem}>
-                <strong>{fmt(it.date)}</strong>
+                <strong>{fmtW(it.date)}</strong>
                 <span style={S.tagPlan}>計画年休</span>
                 <span style={S.plainMemo}>
                   {it.minutes}分（約{(it.minutes / daily).toFixed(1)}日分）
@@ -193,7 +193,7 @@ export default function StaffView({ me, impersonated = false }) {
             <tbody>
               {records.map((r) => (
                 <tr key={r.id}>
-                  <td style={S.td}>{fmt(r.date)}</td>
+                  <td style={S.td}>{fmtW(r.date)}</td>
                   <td style={S.td}>
                     <span style={r.type === "planned" ? S.tagPlan : S.tagNormal}>
                       {r.type === "planned" ? "計画年休" : "通常"}

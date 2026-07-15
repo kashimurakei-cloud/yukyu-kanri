@@ -43,6 +43,12 @@ export function fmt(dateStr) {
   const [y, m, d] = dateStr.split("-");
   return `${y}/${Number(m)}/${Number(d)}`;
 }
+// 曜日つき: 2025/12/3（水）
+export function fmtW(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr + "T00:00:00");
+  return `${fmt(dateStr)}（${WEEKDAYS[d.getDay()].label}）`;
+}
 export function weekdayKeyOf(dateStr) {
   const d = new Date(dateStr + "T00:00:00");
   return WEEKDAYS[d.getDay()].key;

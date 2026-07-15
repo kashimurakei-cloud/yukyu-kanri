@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { calcBalance, nextGrant, calcUpcomingPlanned, fmt, todayStr, weekdayKeyOf } from "../lib/leave";
+import { calcBalance, nextGrant, calcUpcomingPlanned, fmt, fmtW, todayStr, weekdayKeyOf } from "../lib/leave";
 import {
   getAllStaff,
   getLeaveRecords,
@@ -435,7 +435,7 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
           <tbody>
             {sorted.map((r) => (
               <tr key={r.id}>
-                <td style={S.td}>{fmt(r.date)}</td>
+                <td style={S.td}>{fmtW(r.date)}</td>
                 <td style={S.td}>
                   <span style={r.type === "planned" ? S.tagPlan : S.tagNormal}>
                     {r.type === "planned" ? "計画年休" : "通常"}
@@ -763,7 +763,7 @@ function PlannedTab({ plannedLeaves, onAdd, onDelete, onCancelApplied, staffList
             <tbody>
               {plannedLeaves.map((p) => (
                 <tr key={p.id}>
-                  <td style={S.tdBold}>{fmt(p.date)}</td>
+                  <td style={S.tdBold}>{fmtW(p.date)}</td>
                   <td style={S.tdMemo}>{p.memo || "計画年休"}</td>
                   <td style={S.td}>
                     <span style={p.status === "applied" ? S.tagExpired : S.tagActive}>
