@@ -403,16 +403,21 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
         <Stat label="取得済" main={`${bal.usedMin.toLocaleString()}分`} sub={`約${(bal.usedMin / daily).toFixed(1)}日分`} />
         <Stat label="次回付与" main={ng ? fmt(ng.grantDate) : "—"} sub={ng ? `${ng.days}日` : ""} />
       </div>
-      {bal.overflowMin > 0 && (
+      {bal.recentOverflowMin > 0 ? (
         <div style={S.errorBox}>
-          ⚠ 超過取得 累計{bal.overflowMin}分
-          {bal.recentOverflowMin > 0
-            ? `（うち直近の付与以降 ${bal.recentOverflowMin}分 — 給与控除など別途対応してください）`
-            : "（すべて過去の付与期間のもの・記録として保持）"}
-          。有給残とは<strong>別枠</strong>で、残からは引いていません。
-          入力ミスの場合は取得記録の分数を修正（2025年以前の半日は240分・1日は480分）。
+          ⚠ 超過取得 {bal.recentOverflowMin}分
+          （{bal.recentOverflowItems.map((o) => `${fmt(o.date)}の取得で${o.minutes}分`).join("、")}）。
+          有給残とは<strong>別枠</strong>・残からは引いていません。
+          給与控除など別途対応してください。入力ミスの場合は取得記録の分数を修正
+          （2025年以前の半日は240分・1日は480分）。
+          {bal.overflowMin > bal.recentOverflowMin && ` 過去の超過も累計${bal.overflowMin}分あります。`}
         </div>
-      )}
+      ) : bal.overflowMin > 0 ? (
+        <p style={S.noteSmall}>
+          ※ 過去の付与期間に超過取得が累計{bal.overflowMin}分ありました
+          （{bal.overflowItems.map((o) => `${fmt(o.date)}の取得で${o.minutes}分`).join("、")}・対応済み想定・記録として保持）。
+        </p>
+      ) : null}
       <h3 style={S.subTitle}>取得履歴</h3>
       {sorted.length === 0 ? (
         <p style={S.empty}>取得記録はありません。</p>

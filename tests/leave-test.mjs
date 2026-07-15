@@ -79,6 +79,7 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   const after = calcBalance(staff, records, "2026-08-01"); // 2回目付与後
   check("新付与後: スタッフ向け超過は消える", after.recentOverflowMin === 0);
   check("累計の超過は院長向けに残る", after.overflowMin === 480);
+  check("いつ・何分オーバーしたか残る", after.overflowItems.length === 1 && after.overflowItems[0].date === "2026-06-30" && after.overflowItems[0].minutes === 480);
 }
 
 console.log("=== LEAVE: 時効警告もFIFO基準 ===");

@@ -137,10 +137,15 @@ export function calcBalance(staff, records, asOf = todayStr()) {
   // recentOverflowMin: 直近の付与日以降に発生した超過。スタッフ画面と要対応はこちらを使い、
   // 新しい付与が来たら古い超過は表示から消える（院長の履歴カードには累計を残す）。
   const lastGrantDate = grants.length > 0 ? grants[grants.length - 1].grantDate : null;
-  const recentOverflowMin = (overflowItems || [])
-    .filter((o) => !lastGrantDate || o.date >= lastGrantDate)
-    .reduce((s, o) => s + o.minutes, 0);
-  return { grants, active, grantedMin, usedMin, remainMin, lapsedMin, overflowMin: overflow, recentOverflowMin, daily };
+  const recentOverflowItems = (overflowItems || []).filter((o) => !lastGrantDate || o.date >= lastGrantDate);
+  const recentOverflowMin = recentOverflowItems.reduce((s, o) => s + o.minutes, 0);
+  return {
+    grants, active, grantedMin, usedMin, remainMin, lapsedMin,
+    overflowMin: overflow, recentOverflowMin,
+    overflowItems, // いつ・何分オーバーしたか（全期間）
+    recentOverflowItems, // 直近付与日以降のもの
+    daily,
+  };
 }
 
 // このスタッフが、指定された計画年休「予定」のうち

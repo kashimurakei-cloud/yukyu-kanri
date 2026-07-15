@@ -131,6 +131,9 @@ export default function StaffView({ me, impersonated = false }) {
               <span>⚠ 超過取得（有給残とは別枠・院長が別途対応）</span>
               <span style={{ fontWeight: 800 }}>{bal.recentOverflowMin}分</span>
             </div>
+            <div style={{ fontSize: 12, opacity: 0.9, marginTop: 2 }}>
+              {bal.recentOverflowItems.map((o) => `${fmt(o.date)}の取得で${o.minutes}分`).join("、")}
+            </div>
           </div>
         )}
         <div style={S.heroMeta}>
