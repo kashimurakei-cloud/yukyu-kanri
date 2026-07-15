@@ -336,12 +336,13 @@ function AddRecordCard({ staff, onAdd, records }) {
   const [busy, setBusy] = useState(false);
 
   const daily = staff.dailyMinutes || 480;
-  const suggested = (staff.minutesPerDay?.[weekdayKeyOf(date)] ?? 0) || daily;
-
-  const AM_MIN = 260;
+  // 選んだ日の曜日に応じた実分数（スタッフ登録の「曜日ごとの勤務分」から取る）
+  // 1日 = その曜日の勤務分、午前 = 260分固定、午後 = 1日 − 260分
   const wk = weekdayKeyOf(date);
-  const pmMin = wk === "tue" || wk === "fri" ? 270 : 180;
-  const pmLabel = wk === "tue" || wk === "fri" ? "午後（270分）" : "午後（180分）";
+  const dayMin = (staff.minutesPerDay?.[wk] ?? 0) || daily;
+  const suggested = dayMin;
+  const AM_MIN = 260;
+  const pmMin = Math.max(dayMin - AM_MIN, 0);
 
   function pick(m, note) {
     setMinutes(String(m));
@@ -372,17 +373,17 @@ function AddRecordCard({ staff, onAdd, records }) {
 
       <label style={S.fieldLabel}>
         取得時間（分）
-        <span style={S.hint}>ボタンで入れるか、分を直接入力できます。あなたの1日は平均{daily}分。</span>
+        <span style={S.hint}>ボタンは選んだ日の曜日に合わせて自動計算されます。60分・120分など自由な分数も直接入力OK。</span>
       </label>
       <div style={S.quickRow}>
-        <button type="button" style={S.quickBtn} onClick={() => pick(daily, "")}>
-          1日（{daily}分）
+        <button type="button" style={S.quickBtn} onClick={() => pick(dayMin, "")}>
+          1日（{dayMin}分）
         </button>
         <button type="button" style={S.quickBtn} onClick={() => pick(AM_MIN, "午前")}>
           午前（{AM_MIN}分）
         </button>
         <button type="button" style={S.quickBtn} onClick={() => pick(pmMin, "午後")}>
-          {pmLabel}
+          午後（{pmMin}分）
         </button>
       </div>
       <input

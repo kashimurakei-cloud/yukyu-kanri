@@ -351,7 +351,15 @@ try {
   /* 登録→トースト→取消 */
   console.log("=== STAFF: ADD + TOAST ===");
   const before = globalThis.__DB["staff/u-a/leaveRecords"].length;
-  click(byText(root2, "button", "1日（480分）"));
+  // 1日ボタンは選んだ曜日の勤務分で自動計算される
+  const oneDayBtn = [...root2.querySelectorAll("button")].find((b) => /^1日（\d+分）$/.test(b.textContent));
+  const expectedMin = Number(oneDayBtn.textContent.match(/（(\d+)分）/)[1]);
+  console.log("曜日連動の1日ボタン:", !!oneDayBtn);
+  console.log("午後 = 1日 − 260:", (() => {
+    const pm = [...root2.querySelectorAll("button")].find((b) => /^午後（\d+分）$/.test(b.textContent));
+    return !!pm && Number(pm.textContent.match(/（(\d+)分）/)[1]) === Math.max(expectedMin - 260, 0);
+  })());
+  click(oneDayBtn);
   await wait(150);
   click(byText(root2, "button", "登録する"));
   await wait(700);
