@@ -221,7 +221,8 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
           {group.rows.map(({ s, bal, ng, forecast, five, expiring }) => {
             const remainDays = bal.remainMin / bal.daily;
-            const low = forecast < 0;
+            // 非常勤は残不足なら計画年休が自動スキップされるため不足見込みタグは出さない
+            const low = forecast < 0 && empTypeOf(s) !== "part";
             const warn5 = forecast >= 0 && forecast < bal.daily * 5;
             const fiveColor = !five ? null
               : five.status === "done" ? "#2f7d4f"

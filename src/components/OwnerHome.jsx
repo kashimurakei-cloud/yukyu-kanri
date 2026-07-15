@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { calcBalance, nextGrant, calcUpcomingPlanned, fiveDayProgress, expiringGrants, fmt, todayStr } from "../lib/leave";
+import { calcBalance, nextGrant, calcUpcomingPlanned, fiveDayProgress, expiringGrants, fmt, todayStr, empTypeOf } from "../lib/leave";
 import { S, accent } from "../styles";
 
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
@@ -37,7 +37,8 @@ export default function OwnerHome({ staffList, recordsByStaff, pendingPlanned, o
       alerts.push({ level: "mid", uid: r.s.id, msg: `${r.s.name}さん：年5日義務のペースが遅れています（現在 ${r.five.takenDays.toFixed(1)}日）` });
     for (const e of r.expiring)
       alerts.push({ level: "mid", uid: r.s.id, msg: `${r.s.name}さん：${e.remainMin}分（約${e.remainDays.toFixed(1)}日分）が ${fmt(e.expireDate)} に時効消滅（あと${e.inDays}日）` });
-    if (r.forecast < 0)
+    // 非常勤は残不足なら計画年休が自動スキップされるので、不足見込みの警告は出さない
+    if (r.forecast < 0 && empTypeOf(r.s) !== "part")
       alerts.push({ level: "high", uid: r.s.id, msg: `${r.s.name}さん：計画年休で残が不足する見込み（${r.forecast}分）` });
     if (r.bal.recentOverflowMin > 0)
       alerts.push({ level: "high", uid: r.s.id, msg: `${r.s.name}さん：超過取得 ${r.bal.recentOverflowMin}分（有給残とは別枠）。給与側の対応か記録の修正を` });
