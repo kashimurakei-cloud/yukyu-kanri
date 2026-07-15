@@ -337,6 +337,7 @@ try {
   console.log("=== STAFF: HERO ===");
   console.log("Hero 残:", html.includes("あなたの有給残"));
   console.log("Hero 分メイン:", html.includes("約") && html.includes("1日=平均"));
+  console.log("付与の履歴に消化状況:", html.includes("消化状況") && (html.includes("分 消化") || html.includes("未消化")));
   console.log("年5日義務 in hero:", html.includes("年5日取得義務"));
   console.log("MiniPickCal:", html.includes("日をタップで取得日に設定"));
 
@@ -369,6 +370,20 @@ try {
   click(byText(root2, "button", "取消"));
   await wait(700);
   console.log("Undo removes record:", globalThis.__DB["staff/u-a/leaveRecords"].length === before);
+
+  /* 休診日(勤務分0の曜日)はボタン非表示・自由入力のみ */
+  console.log("=== STAFF: 休診日 ===");
+  let sunDay = null;
+  for (let d = 1; d <= 28; d++) {
+    const dt = new Date(today.getFullYear(), today.getMonth(), d);
+    if (dt.getDay() === 0) { sunDay = String(d); break; }
+  }
+  const sunBtn = [...root2.querySelectorAll("button")].find((b) => new RegExp(`^${sunDay}●?$`).test(b.textContent.trim()));
+  click(sunBtn);
+  await wait(250);
+  html = root2.innerHTML;
+  console.log("休診日はボタン非表示:", !/1日（\d+分）/.test(html));
+  console.log("休診日の案内と自由入力:", html.includes("勤務日ではありません") && html.includes("分数を直接入力"));
 
   /* ========== パスワード変更(スタッフ側) ========== */
   console.log("=== STAFF: PASSWORD ===");

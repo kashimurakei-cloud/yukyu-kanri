@@ -40,6 +40,11 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   check("残 = 23日（時効切れ付与から消化済みの2日は引かない）", bal.remainMin === 23 * 480);
   check("時効消滅 = 8日", bal.lapsedMin === 8 * 480);
   check("取得済表示 = 2日", bal.usedMin === 2 * 480);
+  // 付与ごとの消化状況（付与の履歴の表示に使う）
+  const g0 = bal.grants[0];
+  check("初回付与の消化 = 2日分", g0.consumedMin === 2 * 480 && g0.leftMin === 8 * 480);
+  check("消化の期間 = 最初〜最後の取得日", g0.alloc[0].date === "2023-12-12" && g0.alloc[g0.alloc.length - 1].date === "2024-04-23");
+  check("2回目以降は未消化", bal.grants[1].consumedMin === 0 && bal.grants[2].consumedMin === 0);
 }
 // 時効消滅が無いケースは従来計算と一致（残 = 付与 − 取得）
 {

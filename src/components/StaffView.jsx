@@ -338,9 +338,12 @@ function AddRecordCard({ staff, onAdd, records }) {
   const daily = staff.dailyMinutes || 480;
   // 選んだ日の曜日に応じた実分数（スタッフ登録の「曜日ごとの勤務分」から取る）
   // 1日 = その曜日の勤務分、午前 = 260分固定、午後 = 1日 − 260分
+  // 勤務分0の曜日（休診日・非勤務日）はボタンを出さず、分の直接入力のみ。
   const wk = weekdayKeyOf(date);
-  const dayMin = (staff.minutesPerDay?.[wk] ?? 0) || daily;
-  const suggested = dayMin;
+  const rawDayMin = staff.minutesPerDay?.[wk] ?? 0;
+  const isWorkday = rawDayMin > 0;
+  const dayMin = rawDayMin || daily;
+  const suggested = isWorkday ? rawDayMin : 0;
   const AM_MIN = 260;
   const pmMin = Math.max(dayMin - AM_MIN, 0);
 
@@ -373,23 +376,33 @@ function AddRecordCard({ staff, onAdd, records }) {
 
       <label style={S.fieldLabel}>
         取得時間（分）
-        <span style={S.hint}>ボタンは選んだ日の曜日に合わせて自動計算されます。60分・120分など自由な分数も直接入力OK。</span>
+        {isWorkday && <span style={S.hint}>ボタンは選んだ日の曜日に合わせて自動計算されます。</span>}
       </label>
-      <div style={S.quickRow}>
-        <button type="button" style={S.quickBtn} onClick={() => pick(dayMin, "")}>
-          1日（{dayMin}分）
-        </button>
-        <button type="button" style={S.quickBtn} onClick={() => pick(AM_MIN, "午前")}>
-          午前（{AM_MIN}分）
-        </button>
-        <button type="button" style={S.quickBtn} onClick={() => pick(pmMin, "午後")}>
-          午後（{pmMin}分）
-        </button>
-      </div>
+      {isWorkday ? (
+        <div style={S.quickRow}>
+          <button type="button" style={S.quickBtn} onClick={() => pick(dayMin, "")}>
+            1日（{dayMin}分）
+          </button>
+          <button type="button" style={S.quickBtn} onClick={() => pick(AM_MIN, "午前")}>
+            午前（{AM_MIN}分）
+          </button>
+          <button type="button" style={S.quickBtn} onClick={() => pick(pmMin, "午後")}>
+            午後（{pmMin}分）
+          </button>
+        </div>
+      ) : (
+        <p style={{ ...S.noteSmall, margin: "4px 0 8px" }}>
+          この日はあなたの勤務日ではありません。取得する場合は下に分数を直接入力してください。
+        </p>
+      )}
+      <label style={S.fieldLabel}>
+        分数を直接入力もできます
+        <span style={S.hint}>例: 60、120 など（ボタン以外の時間はここに）</span>
+      </label>
       <input
         type="number"
         inputMode="numeric"
-        placeholder={`分を入力（空欄なら${suggested}分）`}
+        placeholder={isWorkday ? `分を入力（空欄なら1日=${suggested}分）` : "分を入力"}
         value={minutes}
         onChange={(e) => setMinutes(e.target.value)}
         style={S.input}
@@ -419,6 +432,7 @@ function GrantsCard({ bal }) {
               <th style={S.th}>付与日</th>
               <th style={S.th}>区分</th>
               <th style={S.thR}>付与分</th>
+              <th style={S.th}>消化状況</th>
               <th style={S.th}>状態</th>
             </tr>
           </thead>
@@ -428,11 +442,35 @@ function GrantsCard({ bal }) {
               .reverse()
               .map((g) => {
                 const isActive = bal.active.some((a) => a.grantDate === g.grantDate);
+                const first = g.alloc?.[0];
+                const last = g.alloc?.[g.alloc.length - 1];
                 return (
                   <tr key={g.grantDate}>
                     <td style={S.td}>{fmt(g.grantDate)}</td>
                     <td style={S.td}>{g.label}</td>
                     <td style={S.tdR}>{g.minutes.toLocaleString()}分<span style={S.minSub}>（{g.days}日）</span></td>
+                    <td style={S.td}>
+                      {g.consumedMin > 0 ? (
+                        <>
+                          {g.consumedMin.toLocaleString()}分 消化
+                          <span style={S.minSub}>
+                            （{fmt(first.date)}{g.alloc.length > 1 ? `〜${fmt(last.date)}` : ""}の取得）
+                          </span>
+                        </>
+                      ) : (
+                        "未消化"
+                      )}
+                      {isActive && g.leftMin > 0 && (
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#2f6358" }}>
+                          残り {g.leftMin.toLocaleString()}分
+                        </div>
+                      )}
+                      {!isActive && g.leftMin > 0 && (
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#b4341f" }}>
+                          {g.leftMin.toLocaleString()}分 時効消滅
+                        </div>
+                      )}
+                    </td>
                     <td style={S.td}>
                       <span style={isActive ? S.tagActive : S.tagExpired}>{isActive ? "有効" : "時効"}</span>
                     </td>
@@ -442,7 +480,10 @@ function GrantsCard({ bal }) {
           </tbody>
         </table>
       )}
-      <p style={S.noteSmall}>付与日から2年で時効。有効な付与のみ残数に算入。</p>
+      <p style={S.noteSmall}>
+        付与日から2年で時効。有効な付与のみ残数に算入。
+        取得は古い付与から順に消化されます（どの取得がどの付与から引かれたかは「消化状況」の期間でわかります）。
+      </p>
     </section>
   );
 }

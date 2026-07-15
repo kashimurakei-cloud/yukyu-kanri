@@ -90,6 +90,7 @@ export function nextGrant(joinDate, workDaysPerWeek, asOf = todayStr()) {
    どの付与にも当てられない分は overflow として返す（残から差し引いて過大計上を防ぐ）。 */
 function fifoConsume(grants, records) {
   const left = grants.map((g) => g.minutes);
+  const alloc = grants.map(() => []); // 各付与から「いつ・何分」消化されたか
   let overflow = 0;
   const recs = [...(records || [])].sort((a, b) => (a.date < b.date ? -1 : 1));
   for (const r of recs) {
@@ -100,11 +101,12 @@ function fifoConsume(grants, records) {
         const take = Math.min(left[i], need);
         left[i] -= take;
         need -= take;
+        if (take > 0) alloc[i].push({ date: r.date, minutes: take });
       }
     }
     overflow += need;
   }
-  return { left, overflow };
+  return { left, overflow, alloc };
 }
 
 // 残数計算（時効2年・FIFO消化）。付与分 = 付与日数 × その人の1日分。
@@ -117,10 +119,14 @@ export function calcBalance(staff, records, asOf = todayStr()) {
   const active = grants.filter((g) => g.expire > asOf);
   const grantedMin = active.reduce((s, g) => s + g.minutes, 0);
   const usedMin = (records || []).reduce((s, r) => s + Number(r.minutes || 0), 0);
-  const { left, overflow } = fifoConsume(grants, records);
+  const { left, overflow, alloc } = fifoConsume(grants, records);
   let remainMin = 0;
   let lapsedMin = 0; // 時効消滅した未消化分
   grants.forEach((g, i) => {
+    // 付与ごとの消化状況（付与の履歴の表示に使う）
+    g.leftMin = left[i];
+    g.consumedMin = g.minutes - left[i];
+    g.alloc = alloc[i];
     if (g.expire > asOf) remainMin += left[i];
     else lapsedMin += left[i];
   });
