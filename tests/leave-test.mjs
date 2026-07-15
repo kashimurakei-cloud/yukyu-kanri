@@ -5,7 +5,7 @@
 ============================================================ */
 process.env.TZ = "Asia/Tokyo";
 
-const { addMonths, todayStr, calcBalance, expiringGrants, availableAt, empTypeOf } = await import("../src/lib/leave.js");
+const { addMonths, todayStr, calcBalance, expiringGrants, availableAt, empTypeOf, attendanceRateFor, attendancePeriods } = await import("../src/lib/leave.js");
 
 let pass = 0, fail = 0;
 function check(label, cond) {
@@ -113,6 +113,34 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
 {
   check("employmentType優先", empTypeOf({ employmentType: "part", workDaysPerWeek: 5 }) === "part");
   check("未設定は週5以上=常勤", empTypeOf({ workDaysPerWeek: 5 }) === "full" && empTypeOf({ workDaysPerWeek: 3 }) === "part");
+}
+
+// 出勤率8割の確認（勤怠は任意入力・算定期間内の月だけ集計）
+{
+  const staff = { joinDate: "2023-06-06", workDaysPerWeek: 5, dailyMinutes: 480 };
+  // asOf 2026-07-13 → 次回付与 2026-12-06、算定期間 2025-12-06〜
+  const att = [
+    { month: "2025-11", worked: 10, absent: 0 }, // 期間外 → 無視
+    { month: "2026-01", worked: 8, absent: 2 },
+    { month: "2026-02", worked: 6, absent: 4 },
+  ];
+  const r = attendanceRateFor(staff, att, "2026-07-13");
+  check("期間内だけ集計(14勤6欠)", r.worked === 14 && r.absent === 6);
+  check("出勤率70%で8割未満", Math.round(r.rate * 100) === 70 && r.ok === false);
+  check("入力なしならnull", attendanceRateFor(staff, [{ month: "2025-01", worked: 9, absent: 1 }], "2026-07-13") === null);
+}
+// 過去の付与期間ごとの出勤率一覧（過去数年分の勤怠をまとめて確認できる）
+{
+  const staff = { joinDate: "2023-06-06", workDaysPerWeek: 5, dailyMinutes: 480 };
+  const att = [
+    { month: "2024-06", worked: 6, absent: 4 },  // 2024-12付与の算定期間(2023-12〜2024-12)
+    { month: "2025-03", worked: 10, absent: 0 }, // 2025-12付与の算定期間(2024-12〜2025-12)
+    { month: "2026-01", worked: 8, absent: 2 },  // 次回2026-12付与の算定期間
+  ];
+  const ps = attendancePeriods(staff, att, "2026-07-13");
+  check("3期間ぶん出る(新しい順)", ps.length === 3 && ps[0].future === true && ps[0].grantDate === "2026-12-06");
+  check("過去期間の判定(60%→8割未満)", ps[2].grantDate === "2024-12-06" && Math.round(ps[2].rate * 100) === 60 && ps[2].ok === false);
+  check("過去期間の判定(100%→OK)", ps[1].grantDate === "2025-12-06" && ps[1].ok === true);
 }
 
 console.log("=== LEAVE: 時効警告もFIFO基準 ===");

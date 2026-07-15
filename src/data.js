@@ -102,6 +102,22 @@ export async function migrateStaffData(oldUid, newUid) {
   await deleteDoc(doc(db, "staff", oldUid));
 }
 
+/* ---------- 勤怠（出勤率8割の確認用・任意入力） ----------
+   staff/{uid}/attendance/{YYYY-MM}: { month, worked(出勤数), absent(欠勤数) }
+   確認したいスタッフだけ入力すればよい。 */
+export async function getAttendance(uid) {
+  const snap = await getDocs(collection(db, "staff", uid, "attendance"));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (a.month < b.month ? 1 : -1)); // 新しい月が上
+}
+export async function upsertAttendance(uid, month, worked, absent) {
+  await setDoc(doc(db, "staff", uid, "attendance", month), { month, worked, absent });
+}
+export async function deleteAttendance(uid, month) {
+  await deleteDoc(doc(db, "staff", uid, "attendance", month));
+}
+
 /* ---------- 通知（院長のみ） ---------- */
 export async function getNotifications() {
   const q = query(collection(db, "notifications"), orderBy("createdAt", "desc"));

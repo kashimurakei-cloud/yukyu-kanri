@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { calcBalance, nextGrant, calcUpcomingPlanned, fmt, fmtW, todayStr, weekdayKeyOf } from "../lib/leave";
+import { calcBalance, nextGrant, calcUpcomingPlanned, fmt, fmtW, todayStr, weekdayKeyOf, addMonths, attendancePeriods } from "../lib/leave";
 import {
   getAllStaff,
   getLeaveRecords,
@@ -13,6 +13,9 @@ import {
   updateLeaveRecord,
   deleteLeaveRecord,
   addLeaveRecord,
+  getAttendance,
+  upsertAttendance,
+  deleteAttendance,
 } from "../data";
 import StaffManager, { empTypeOf, EMP_LABEL } from "./StaffManager";
 import StaffView from "./StaffView";
@@ -367,6 +370,7 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
   const [editing, setEditing] = useState(null);
   const [showProxy, setShowProxy] = useState(false);
   const [showAdjust, setShowAdjust] = useState(false);
+  const [showAttend, setShowAttend] = useState(false);
 
   async function handleProxyAdd(rec) {
     const newId = await addLeaveRecord(staff.id, staff.name, rec, false); // 代理登録は通知なし
@@ -520,6 +524,16 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
         )}
       </div>
 
+      <div style={{ marginTop: 10 }}>
+        {!showAttend ? (
+          <button style={S.btnGhost} onClick={() => setShowAttend(true)}>
+            📋 勤怠を記録（出勤率8割の確認用・任意）
+          </button>
+        ) : (
+          <AttendanceSection staff={staff} onClose={() => setShowAttend(false)} />
+        )}
+      </div>
+
       {editing && (
         <EditRecordModal
           record={editing}
@@ -529,6 +543,141 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
         />
       )}
     </section>
+  );
+}
+
+// 勤怠記録（出勤率8割の確認用・任意）。確認したいスタッフだけ月ごとの出勤数・欠勤数を入れる。
+// 次回付与の算定期間の出勤率を自動計算し、8割未満なら「付与なし」設定を案内する。
+function AttendanceSection({ staff, onClose }) {
+  const [rows, setRows] = useState(null);
+  const [month, setMonth] = useState(() => addMonths(todayStr(), -1).slice(0, 7)); // 先月から
+  const [worked, setWorked] = useState("");
+  const [absent, setAbsent] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function reload() {
+    setRows(await getAttendance(staff.id));
+  }
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staff.id]);
+
+  const periods = rows ? attendancePeriods(staff, rows) : [];
+
+  async function save() {
+    if (!month || worked === "") return;
+    setBusy(true);
+    try {
+      await upsertAttendance(staff.id, month, Number(worked), Number(absent || 0));
+      await reload();
+      // 連続入力: 翌月に進めて続けて入れられる
+      setMonth(addMonths(month + "-01", 1).slice(0, 7));
+      setWorked("");
+      setAbsent("");
+    } catch (e) {
+      console.error(e);
+      alert("保存に失敗しました。");
+    }
+    setBusy(false);
+  }
+
+  async function remove(m) {
+    await deleteAttendance(staff.id, m);
+    await reload();
+  }
+
+  return (
+    <div style={{ background: "#fbfaf7", border: `1px solid ${"#e2ded5"}`, borderRadius: 12, padding: 16 }}>
+      <div style={S.notifHead}>
+        <h3 style={S.subTitle}>📋 勤怠記録（出勤率8割の確認用）</h3>
+        <button style={S.btnGhost} onClick={onClose}>閉じる</button>
+      </div>
+      <p style={S.noteSmall}>
+        確認したいスタッフだけ入力すればOK。有給・計画年休で休んだ日は法律上「出勤」扱いなので出勤数に含めてください。
+      </p>
+
+      {periods.length > 0 && (
+        <table style={{ ...S.table, marginBottom: 12 }}>
+          <thead>
+            <tr>
+              <th style={S.th}>付与日</th>
+              <th style={S.th}>算定期間</th>
+              <th style={S.thR}>出勤/欠勤</th>
+              <th style={S.thR}>出勤率</th>
+              <th style={S.th}>判定</th>
+            </tr>
+          </thead>
+          <tbody>
+            {periods.map((p) => (
+              <tr key={p.grantDate}>
+                <td style={S.td}>{fmt(p.grantDate)}{p.future ? "（次回）" : ""}</td>
+                <td style={S.td}>{fmt(p.start)}〜</td>
+                <td style={S.tdR}>{p.worked}日 / {p.absent}日</td>
+                <td style={{ ...S.tdR, fontWeight: 800, color: p.ok ? "#2f6358" : "#b4341f" }}>
+                  {Math.round(p.rate * 100)}%
+                </td>
+                <td style={S.td}>
+                  {p.skipped ? (
+                    <span style={S.tagExpired}>付与なし設定済み</span>
+                  ) : p.ok ? (
+                    <span style={S.tagActive}>8割OK</span>
+                  ) : (
+                    <span style={S.warnTag}>8割未満 → 付与なし候補</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div className="grid2" style={S.grid2}>
+        <div>
+          <label style={S.fieldLabel}>月</label>
+          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} style={S.input} />
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <label style={S.fieldLabel}>出勤数</label>
+            <input type="number" inputMode="numeric" value={worked} onChange={(e) => setWorked(e.target.value)} style={S.input} placeholder="例: 8" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={S.fieldLabel}>欠勤数</label>
+            <input type="number" inputMode="numeric" value={absent} onChange={(e) => setAbsent(e.target.value)} style={S.input} placeholder="例: 0" />
+          </div>
+        </div>
+      </div>
+      <button style={{ ...S.btnPrimary, marginTop: 8, opacity: busy ? 0.6 : 1 }} onClick={save} disabled={busy}>
+        {busy ? "保存中…" : "この月を保存（同じ月は上書き）"}
+      </button>
+
+      {rows && rows.length > 0 && (
+        <table style={{ ...S.table, marginTop: 12 }}>
+          <thead>
+            <tr>
+              <th style={S.th}>月</th>
+              <th style={S.thR}>出勤</th>
+              <th style={S.thR}>欠勤</th>
+              <th style={S.th}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((a) => (
+              <tr key={a.month}>
+                <td style={S.td}>{a.month.replace("-", "/")}</td>
+                <td style={S.tdR}>{a.worked}日</td>
+                <td style={S.tdR}>{a.absent}日</td>
+                <td style={S.td}>
+                  <button style={{ ...S.linkBtn, color: "#b4341f", borderColor: "#e3b5ad" }} onClick={() => remove(a.month)}>削除</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {rows && rows.length === 0 && <p style={S.empty}>まだ勤怠の入力はありません。</p>}
+    </div>
   );
 }
 

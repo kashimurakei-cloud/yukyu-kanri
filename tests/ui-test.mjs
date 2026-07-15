@@ -296,6 +296,21 @@ try {
   await wait(800);
   console.log("トースト取消で戻る:", !globalThis.__DB["staff/u-a/leaveRecords"].some((r) => r.type === "adjust"));
 
+  /* 勤怠記録（8割確認・任意） */
+  console.log("=== OWNER: 勤怠(8割確認) ===");
+  click(byText(histSec(), "button", "勤怠を記録"));
+  await wait(400);
+  console.log("勤怠フォーム表示:", histSec().innerHTML.includes("出勤率8割"));
+  setVal([...histSec().querySelectorAll('input[type="month"]')][0], iso(today).slice(0, 7));
+  const attNums = [...histSec().querySelectorAll('input[type="number"]')];
+  setVal(attNums[attNums.length - 2], "8"); // 出勤
+  setVal(attNums[attNums.length - 1], "2"); // 欠勤
+  await wait(150);
+  click(byText(histSec(), "button", "この月を保存"));
+  await wait(800);
+  console.log("勤怠が保存される:", (globalThis.__DB["staff/u-a/attendance"] || []).length === 1);
+  console.log("出勤率80%表示:", histSec().innerHTML.includes("出勤率") && histSec().innerHTML.includes("80%"));
+
   /* 本人画面プレビュー（院長モード・ログアウト不要） */
   console.log("=== OWNER: IMPERSONATION PREVIEW ===");
   click(byText(rootEl, "button", "本人画面を開く"));

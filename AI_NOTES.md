@@ -19,6 +19,7 @@
   - noGrantDates: 出勤率8割未満で「付与なし」にした付与日。その年は0日付与、勤続段階は進む。スタッフ編集のチェックボックスで設定。
   - status="retired" は退職者。一覧・カレンダー・計画年休・管理簿・自動反映から除外され、本人ログインは「退職済み」でブロック。復帰は unretireStaff。完全削除は deleteStaffCompletely（記録ごと。Authはコンソールで別途削除）。
 - `staff/{uid}/leaveRecords/{id}`: { date, minutes, type: "normal"|"planned", memo, plannedId?, createdAt }
+- `staff/{uid}/attendance/{YYYY-MM}`: { month, worked(出勤数), absent(欠勤数) }。出勤率8割確認用の任意入力（確認したい人だけ）。履歴カードの「📋 勤怠を記録」から。attendanceRateForが次回付与の算定期間（前回付与日〜、初回は入職日〜）の率を計算。attendancePeriodsは過去の付与期間ごとの率一覧（過去数年分の後入れ対応・新しい順・入力のない期間は出さない）。8割未満は「付与なし候補」表示。有給で休んだ日は出勤に数える運用。
 - `notifications/{id}`: { staffUid, staffName, action, date, minutes, read, createdAt }
 - `plannedLeaves/{id}`: { date, memo, status: "pending"|"applied", createdAt }（計画年休の予約。到来分は起動時に applyDuePlannedLeaves で全スタッフの記録へ自動反映）
   - applyDuePlannedLeavesは冪等: 反映済も毎回チェックし、後から登録/曜日設定したスタッフに追い反映（plannedIdで重複防止・入職前日付はスキップ・退職者除外）。

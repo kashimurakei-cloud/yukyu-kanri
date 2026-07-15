@@ -171,6 +171,57 @@ export function availableAt(staff, records, date) {
   return calcBalance(staff, recs, date).remainMin;
 }
 
+// 出勤率(8割)確認: 次回付与の算定期間（前回付与日〜次回付与日の前日。初回は入職日から）の出勤率。
+// attendance: [{month:"YYYY-MM", worked, absent}]（任意入力）。期間内の入力が無ければ null。
+// 有給・計画年休で休んだ日は法律上「出勤」扱いなので、出勤数に含めて入力する運用。
+export function attendanceRateFor(staff, attendance, asOf = todayStr()) {
+  const ng = nextGrant(staff.joinDate, staff.workDaysPerWeek, asOf);
+  if (!ng) return null;
+  const start = ng.label === "6ヶ月" ? staff.joinDate : addMonths(ng.grantDate, -12);
+  const startM = start.slice(0, 7);
+  const endM = ng.grantDate.slice(0, 7);
+  const rows = (attendance || []).filter((a) => a.month >= startM && a.month <= endM);
+  if (rows.length === 0) return null;
+  const worked = rows.reduce((s, a) => s + Number(a.worked || 0), 0);
+  const absent = rows.reduce((s, a) => s + Number(a.absent || 0), 0);
+  const total = worked + absent;
+  if (total <= 0) return null;
+  const rate = worked / total;
+  return { grantDate: ng.grantDate, start, worked, absent, total, rate, months: rows.length, ok: rate >= 0.8 };
+}
+
+// 付与期間ごとの出勤率一覧（過去の付与＋次回付与）。過去数年分の勤怠を入れて後から8割確認できる。
+// 各付与の算定期間 = 前の付与日〜その付与日（初回は入職日〜）。月単位の近似で集計。
+// 入力のない期間は出さない。新しい順で返す。
+export function attendancePeriods(staff, attendance, asOf = todayStr()) {
+  if (!staff.joinDate) return [];
+  const past = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf, staff.noGrantDates || []);
+  const ng = nextGrant(staff.joinDate, staff.workDaysPerWeek, asOf);
+  const all = [
+    ...past.map((g) => ({ grantDate: g.grantDate, label: g.label, skipped: g.skipped, future: false })),
+    ...(ng ? [{ grantDate: ng.grantDate, label: ng.label, skipped: false, future: true }] : []),
+  ];
+  const out = [];
+  for (let i = 0; i < all.length; i++) {
+    const g = all[i];
+    const start = i === 0 ? staff.joinDate : all[i - 1].grantDate;
+    const startM = start.slice(0, 7);
+    const endM = g.grantDate.slice(0, 7);
+    const rows = (attendance || []).filter((a) => a.month >= startM && a.month <= endM);
+    if (rows.length === 0) continue;
+    const worked = rows.reduce((s, a) => s + Number(a.worked || 0), 0);
+    const absent = rows.reduce((s, a) => s + Number(a.absent || 0), 0);
+    const total = worked + absent;
+    if (total <= 0) continue;
+    const rate = worked / total;
+    out.push({
+      grantDate: g.grantDate, label: g.label, skipped: g.skipped, future: g.future,
+      start, worked, absent, total, rate, months: rows.length, ok: rate >= 0.8,
+    });
+  }
+  return out.reverse(); // 新しい順
+}
+
 // このスタッフが、指定された計画年休「予定」のうち
 // 次回付与日までに引かれる見込み分（分）を計算する。
 // plannedLeaves: [{date, ...}] の配列（pendingな予定。台帳）
