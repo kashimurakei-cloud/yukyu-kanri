@@ -40,7 +40,7 @@ export default function OwnerHome({ staffList, recordsByStaff, pendingPlanned, o
     if (r.forecast < 0)
       alerts.push({ level: "high", uid: r.s.id, msg: `${r.s.name}さん：計画年休で残が不足する見込み（${r.forecast}分）` });
     if (r.bal.overflowMin > 0)
-      alerts.push({ level: "high", uid: r.s.id, msg: `${r.s.name}さん：付与を超えた取得が ${r.bal.overflowMin}分 あります。記録の分数を確認してください` });
+      alerts.push({ level: "high", uid: r.s.id, msg: `${r.s.name}さん：超過取得 ${r.bal.overflowMin}分（有給残とは別枠）。給与側の対応か記録の修正を` });
   }
   alerts.sort((a, b) => (a.level === "high" ? -1 : 1) - (b.level === "high" ? -1 : 1));
 

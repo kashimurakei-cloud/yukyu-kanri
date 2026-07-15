@@ -128,8 +128,8 @@ export default function StaffView({ me, impersonated = false }) {
         {bal.overflowMin > 0 && (
           <div style={{ ...S.forecastBox, background: "rgba(255,180,165,0.35)" }}>
             <div style={S.forecastRow}>
-              <span>⚠ 付与を超えて取得した分（残から差し引き済み）</span>
-              <span style={{ fontWeight: 800 }}>−{bal.overflowMin}分</span>
+              <span>⚠ 超過取得（有給残とは別枠・院長が別途対応）</span>
+              <span style={{ fontWeight: 800 }}>{bal.overflowMin}分</span>
             </div>
           </div>
         )}
@@ -368,7 +368,7 @@ function AddRecordCard({ staff, onAdd, records, remainMin = Infinity }) {
     const m = Number(minutes || suggested);
     if (!date || !m) return;
     if (m > remainMin && !window.confirm(
-      `残り${remainMin}分を超えています（${m}分）。\nこのまま登録すると超過分は残から差し引かれます。登録しますか?`
+      `残り${remainMin}分を超えています（${m}分）。\n超過分は有給残とは別枠で記録され、院長が別途対応します。登録しますか?`
     )) return;
     setBusy(true);
     try {

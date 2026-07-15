@@ -53,13 +53,13 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   const bal = calcBalance(staff, records, "2026-06-01"); // 2回目付与(2026-07-01)前
   check("時効なし: 残 = 10日 − 1日", bal.remainMin === 9 * 480);
 }
-// 付与前の日付の取得（入力ミス等）は overflow として残から差し引く（過大計上しない）
+// どの付与からも引けない取得（超過）は別枠(overflowMin)。残とは相殺しない。
 {
   const staff = { joinDate: "2025-01-01", workDaysPerWeek: 5, dailyMinutes: 480 };
   const records = [{ date: "2025-06-01", minutes: 480 }]; // 初回付与(2025-07-01)より前
   const bal = calcBalance(staff, records, "2026-06-01");
-  check("付与前取得は残から控除", bal.remainMin === 9 * 480);
-  check("超過分がoverflowMinで見える", bal.overflowMin === 480);
+  check("超過は残から引かない（相殺しない）", bal.remainMin === 10 * 480);
+  check("超過分は別枠(overflowMin)で見える", bal.overflowMin === 480);
 }
 // 半日取得の端数もFIFOで正しく引ける
 {

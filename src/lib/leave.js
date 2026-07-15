@@ -130,8 +130,8 @@ export function calcBalance(staff, records, asOf = todayStr()) {
     if (g.expire > asOf) remainMin += left[i];
     else lapsedMin += left[i];
   });
-  remainMin = Math.max(0, remainMin - overflow);
-  // overflowMin: どの付与からも引けなかった取得分（残高オーバー）。表示で警告に使う。
+  // overflowMin: どの付与からも引けなかった取得分（残高オーバー）。
+  // 有給残とは相殺しない（翌年付与から引いたりしない）。別枠で表示し、給与側で対応する運用。
   return { grants, active, grantedMin, usedMin, remainMin, lapsedMin, overflowMin: overflow, daily };
 }
 

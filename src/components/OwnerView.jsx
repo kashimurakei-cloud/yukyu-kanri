@@ -405,8 +405,9 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
       </div>
       {bal.overflowMin > 0 && (
         <div style={S.errorBox}>
-          ⚠ 付与を超えて取得した分が {bal.overflowMin}分 あります（残から差し引き済み）。
-          取得記録の分数が正しいか確認してください（2025年以前の半日は240分・1日は480分）。
+          ⚠ 超過取得 {bal.overflowMin}分（有給残とは<strong>別枠</strong>・残からは引いていません）。
+          給与控除など別途対応してください。入力ミスの場合は取得記録の分数を修正
+          （2025年以前の半日は240分・1日は480分）。
         </div>
       )}
       <h3 style={S.subTitle}>取得履歴</h3>
