@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { calcBalance, nextGrant, calcUpcomingPlanned, fiveDayProgress, expiringGrants, fmt, fmtW, todayStr, weekdayKeyOf } from "../lib/leave";
+import { calcBalance, nextGrant, calcUpcomingPlanned, fiveDayProgress, expiringGrants, fmt, fmtW, todayStr, weekdayKeyOf, groupRecordsByPeriod } from "../lib/leave";
 import { getLeaveRecords, addLeaveRecord, getPlannedLeaves, deleteLeaveRecord } from "../data";
 import { changePassword } from "../firebase";
 import Toast from "./Toast";
@@ -180,41 +180,42 @@ export default function StaffView({ me, impersonated = false }) {
         ) : records.length === 0 ? (
           <p style={S.empty}>まだ取得記録はありません。上のフォームから登録できます。</p>
         ) : (
-          <table style={S.table}>
-            <thead>
-              <tr>
-                <th style={S.th}>取得日</th>
-                <th style={S.th}>区分</th>
-                <th style={S.thR}>取得</th>
-                <th style={S.th}>メモ</th>
-                <th style={S.th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((r) => (
-                <tr key={r.id}>
-                  <td style={S.td}>{fmtW(r.date)}</td>
-                  <td style={S.td}>
-                    <span style={r.type === "planned" ? S.tagPlan : r.type === "adjust" ? S.tagExpired : S.tagNormal}>
-                      {r.type === "planned" ? "計画年休" : r.type === "adjust" ? "調整" : "通常"}
-                    </span>
-                  </td>
-                  <td style={S.tdR}>
-                    {r.minutes}分
-                    <span style={S.minSub}>（約{(r.minutes / daily).toFixed(1)}日分）</span>
-                  </td>
-                  <td style={S.tdMemo}>{r.memo || "—"}</td>
-                  <td style={S.td}>
-                    {canCancel(r) && (
-                      <button style={S.linkBtn} onClick={() => handleCancel(r)}>取消</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          groupRecordsByPeriod(me, records).map((g) => (
+            <details key={g.key} open={g.isCurrent} style={{ marginBottom: 8, border: "1px solid #e2ded5", borderRadius: 10, padding: "8px 12px", background: g.isCurrent ? "#fcfbf9" : "#fff" }}>
+              <summary style={{ cursor: "pointer", fontWeight: 800, fontSize: 13.5, padding: "2px 0" }}>
+                {g.start ? `${fmt(g.start)}の付与から${g.isCurrent ? "（今期）" : ""}` : "初回付与前"}
+                <span style={{ fontWeight: 600, color: "#8a857a", marginLeft: 8 }}>
+                  {g.records.length}件・計{g.totalMin.toLocaleString()}分（約{(g.totalMin / daily).toFixed(1)}日分）
+                </span>
+              </summary>
+              <table style={S.table}>
+                <tbody>
+                  {g.records.map((r) => (
+                    <tr key={r.id}>
+                      <td style={S.td}>{fmtW(r.date)}</td>
+                      <td style={S.td}>
+                        <span style={r.type === "planned" ? S.tagPlan : r.type === "adjust" ? S.tagExpired : S.tagNormal}>
+                          {r.type === "planned" ? "計画年休" : r.type === "adjust" ? "調整" : "通常"}
+                        </span>
+                      </td>
+                      <td style={S.tdR}>
+                        {r.minutes}分
+                        <span style={S.minSub}>（約{(r.minutes / daily).toFixed(1)}日分）</span>
+                      </td>
+                      <td style={S.tdMemo}>{r.memo || "—"}</td>
+                      <td style={S.td}>
+                        {canCancel(r) && (
+                          <button style={S.linkBtn} onClick={() => handleCancel(r)}>取消</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          ))
         )}
-        <p style={S.noteSmall}>取得日が来る前の通常取得は、自分で取り消せます。過ぎた記録や計画年休は院長が修正します。</p>
+        <p style={S.noteSmall}>付与年ごとにまとまっています。見出しをタップで開閉。取得日が来る前の通常取得は、自分で取り消せます。</p>
       </section>
 
       {!impersonated && <PasswordCard showToast={showToast} />}

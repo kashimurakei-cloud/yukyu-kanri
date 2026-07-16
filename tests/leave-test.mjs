@@ -5,7 +5,7 @@
 ============================================================ */
 process.env.TZ = "Asia/Tokyo";
 
-const { addMonths, todayStr, calcBalance, expiringGrants, availableAt, empTypeOf, attendanceRateFor, attendancePeriods } = await import("../src/lib/leave.js");
+const { addMonths, todayStr, calcBalance, expiringGrants, availableAt, empTypeOf, attendanceRateFor, attendancePeriods, groupRecordsByPeriod } = await import("../src/lib/leave.js");
 
 let pass = 0, fail = 0;
 function check(label, cond) {
@@ -141,6 +141,23 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   check("3期間ぶん出る(新しい順)", ps.length === 3 && ps[0].future === true && ps[0].grantDate === "2026-12-06");
   check("過去期間の判定(60%→8割未満)", ps[2].grantDate === "2024-12-06" && Math.round(ps[2].rate * 100) === 60 && ps[2].ok === false);
   check("過去期間の判定(100%→OK)", ps[1].grantDate === "2025-12-06" && ps[1].ok === true);
+}
+
+// 取得履歴の付与期間グループ化（折りたたみUI用）
+{
+  const staff = { joinDate: "2023-06-06", workDaysPerWeek: 5, dailyMinutes: 480 };
+  const records = [
+    { id: "a", date: "2023-07-01", minutes: 480 }, // 初回付与前
+    { id: "b", date: "2023-12-12", minutes: 480 }, // 2023-12期
+    { id: "c", date: "2024-04-23", minutes: 480 }, // 2023-12期
+    { id: "d", date: "2025-01-10", minutes: 240 }, // 2024-12期
+    { id: "e", date: "2026-07-01", minutes: 480 }, // 2025-12期（今期）
+  ];
+  const gs = groupRecordsByPeriod(staff, records, "2026-07-16");
+  check("期間数 = 4（今期・過去2・初回前）", gs.length === 4);
+  check("先頭が今期", gs[0].isCurrent === true && gs[0].start === "2025-12-06" && gs[0].records.length === 1);
+  check("2023-12期に2件・計960分", gs[2].start === "2023-12-06" && gs[2].records.length === 2 && gs[2].totalMin === 960);
+  check("初回付与前グループ", gs[3].start === null && gs[3].records[0].id === "a");
 }
 
 console.log("=== LEAVE: 時効警告もFIFO基準 ===");

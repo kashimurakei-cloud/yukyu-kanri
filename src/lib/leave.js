@@ -190,6 +190,38 @@ export function attendanceRateFor(staff, attendance, asOf = todayStr()) {
   return { grantDate: ng.grantDate, start, worked, absent, total, rate, months: rows.length, ok: rate >= 0.8 };
 }
 
+// 取得記録を付与期間ごとにグループ化（履歴の折りたたみ表示用）。
+// 期間 = 各付与日〜次の付与日の前日。初回付与より前の記録は「初回付与前」。新しい期間が先頭。
+export function groupRecordsByPeriod(staff, records, asOf = todayStr()) {
+  const grants = calcGrants(staff.joinDate, staff.workDaysPerWeek, asOf, staff.noGrantDates || []);
+  const dates = grants.map((g) => g.grantDate);
+  const map = new Map();
+  for (const r of records || []) {
+    let start = null;
+    for (const d of dates) {
+      if (d <= r.date) start = d;
+      else break;
+    }
+    const key = start || "pre";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  }
+  const currentStart = dates.length ? dates[dates.length - 1] : null;
+  const out = [];
+  for (const [key, recs] of map) {
+    recs.sort((a, b) => (a.date < b.date ? 1 : -1));
+    out.push({
+      key,
+      start: key === "pre" ? null : key,
+      isCurrent: key !== "pre" && key === currentStart,
+      records: recs,
+      totalMin: recs.reduce((s, r) => s + Number(r.minutes || 0), 0),
+    });
+  }
+  out.sort((a, b) => ((a.start || "0000") < (b.start || "0000") ? 1 : -1));
+  return out;
+}
+
 // 付与期間ごとの出勤率一覧（過去の付与＋次回付与）。過去数年分の勤怠を入れて後から8割確認できる。
 // 各付与の算定期間 = 前の付与日〜その付与日（初回は入職日〜）。月単位の近似で集計。
 // 入力のない期間は出さない。新しい順で返す。

@@ -242,6 +242,7 @@ try {
   await wait(400);
   html = rootEl.innerHTML;
   console.log("History opens:", html.includes("申請履歴"));
+  console.log("履歴が付与年で折りたたみ:", html.includes("（今期）") && html.includes("件・計"));
 
   /* 代理登録の連続入力 */
   console.log("=== OWNER: PROXY CONTINUOUS ADD ===");
