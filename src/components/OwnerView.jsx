@@ -408,7 +408,8 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
 
   async function handleDelete(r) {
     // 台帳（計画年休タブ）から配られた記録はここでは消せない。代理で個別に入れた計画年休(plannedIdなし)はOK。
-    if (r.type === "planned" && r.plannedId) return;
+    // 例外: 有給の付与対象外のスタッフは配られた記録も個別に消せる（未付与なので再反映されない）。
+    if (r.type === "planned" && r.plannedId && !staff.noLeave) return;
     try {
       const backup = { date: r.date, minutes: r.minutes, type: r.type, memo: r.memo || "" };
       await deleteLeaveRecord(staff.id, r.id);
@@ -494,9 +495,11 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
                     </td>
                     <td style={S.tdMemo}>{r.memo || "—"}</td>
                     <td style={S.td}>
-                      {(r.type !== "planned" || !r.plannedId) && (
+                      {(r.type !== "planned" || !r.plannedId || staff.noLeave) && (
                         <span style={{ display: "flex", gap: 6 }}>
-                          <button style={S.linkBtn} onClick={() => setEditing(r)}>編集</button>
+                          {(r.type !== "planned" || !r.plannedId) && (
+                            <button style={S.linkBtn} onClick={() => setEditing(r)}>編集</button>
+                          )}
                           <button style={{ ...S.linkBtn, color: "#b4341f", borderColor: "#e3b5ad" }} onClick={() => handleDelete(r)}>削除</button>
                         </span>
                       )}
