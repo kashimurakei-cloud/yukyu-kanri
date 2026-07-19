@@ -168,6 +168,9 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   check("対象外は付与ゼロ", bal.grants.length === 0 && bal.grantedMin === 0 && bal.remainMin === 0);
   check("対象外は5日義務なし", fiveDayProgress(staff, [], "2026-07-16") === null);
   check("対象外は時効警告なし", expiringGrants(staff, [], "2026-07-16").length === 0);
+  // 記録が残っていても超過は出るが（overflowMin）、UI側では noLeave なら警告を出さない仕様
+  const bal2 = calcBalance(staff, [{ date: "2026-01-10", minutes: 2500 }], "2026-07-16");
+  check("対象外でも計算は壊れない", bal2.remainMin === 0 && bal2.overflowMin === 2500);
 }
 
 console.log("=== LEAVE: 時効警告もFIFO基準 ===");

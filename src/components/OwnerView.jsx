@@ -273,6 +273,7 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
                     </div>
                   </div>
                 )}
+                {!s.noLeave && (
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 8 }}>
                   {bal.recentOverflowMin > 0 && <span style={S.warnTag}>⚠超過{bal.recentOverflowMin}分</span>}
                   {low && <span style={S.warnTag}>残不足見込み</span>}
@@ -281,6 +282,7 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
                     <span key={i} style={S.cautionTag}>⏳{e.remainMin}分 {fmt(e.expireDate)}消滅</span>
                   ))}
                 </div>
+                )}
                 <div style={{ fontSize: 11.5, color: "#8a857a", marginTop: 8 }}>
                   次回付与 {s.noLeave ? "対象外" : ng ? `${fmt(ng.grantDate)}（${ng.days}日）` : "—"}
                 </div>
@@ -445,7 +447,9 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
         <Stat label="取得済" main={`${bal.usedMin.toLocaleString()}分`} sub={`約${(bal.usedMin / daily).toFixed(1)}日分`} />
         <Stat label="次回付与" main={ng ? fmt(ng.grantDate) : "—"} sub={ng ? `${ng.days}日` : ""} />
       </div>
-      {bal.recentOverflowMin > 0 ? (
+      {staff.noLeave ? (
+        <p style={S.noteSmall}>※ このスタッフは有給の付与対象外です（残数・警告の計算はありません）。</p>
+      ) : bal.recentOverflowMin > 0 ? (
         <div style={S.errorBox}>
           ⚠ 超過取得 {bal.recentOverflowMin}分
           （{bal.recentOverflowItems.map((o) => `${fmt(o.date)}の取得で${o.minutes}分`).join("、")}）。

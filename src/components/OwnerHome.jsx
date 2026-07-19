@@ -31,6 +31,7 @@ export default function OwnerHome({ staffList, recordsByStaff, pendingPlanned, o
   // 要対応リスト
   const alerts = [];
   for (const r of rows) {
+    if (r.s.noLeave) continue; // 有給の付与対象外は警告なし
     if (r.five && r.five.status === "danger")
       alerts.push({ level: "high", uid: r.s.id, msg: `${r.s.name}さん：年5日義務まで あと${r.five.need.toFixed(1)}日（期限 ${fmt(r.five.deadline)}・残り${r.five.daysLeft}日）` });
     else if (r.five && r.five.status === "warn")
