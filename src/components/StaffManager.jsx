@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { upsertStaff, migrateStaffData, retireStaff, unretireStaff, deleteStaffCompletely, exportAllData } from "../data";
 import { createStaffAccount } from "../firebase";
-import { WEEKDAYS, todayStr, fmt, calcGrants, empTypeOf, EMP_LABEL } from "../lib/leave";
+import { WEEKDAYS, todayStr, fmt, calcGrants, empTypeOf, EMP_LABEL, staffCompare } from "../lib/leave";
 import { S } from "../styles";
 
 export { empTypeOf, EMP_LABEL }; // 既存のimport元互換のため再エクスポート
@@ -104,16 +104,14 @@ export default function StaffManager({ staffList, retiredList = [], onChanged })
             </thead>
             <tbody>
               {[...staffList]
-                .sort((a, b) => {
-                  const t = (empTypeOf(a) === "full" ? 0 : 1) - (empTypeOf(b) === "full" ? 0 : 1);
-                  if (t !== 0) return t;
-                  return (a.joinDate || "") < (b.joinDate || "") ? -1 : 1;
-                })
+                .sort(staffCompare)
                 .map((s) => (
                 <tr key={s.id}>
                   <td style={S.tdBold}>{s.name}</td>
                   <td style={S.td}>
-                    <span style={empTypeOf(s) === "full" ? S.tagActive : S.tagPlan}>{EMP_LABEL[empTypeOf(s)]}</span>
+                    <span style={empTypeOf(s) === "full" ? S.tagActive : empTypeOf(s) === "part" ? S.tagPlan : S.tagExpired}>
+                      {EMP_LABEL[empTypeOf(s)] || "—"}
+                    </span>
                   </td>
                   <td style={S.td}>{s.joinDate || "—"}</td>
                   <td style={S.td}>週{s.workDaysPerWeek}・{s.dailyMinutes}分</td>
@@ -302,6 +300,7 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
   const [workDaysPerWeek, setWorkDaysPerWeek] = useState(initial?.workDaysPerWeek || 5);
   const [dailyMinutes, setDailyMinutes] = useState(initial?.dailyMinutes || 480);
   const [employmentType, setEmploymentType] = useState(initial ? empTypeOf(initial) : "full");
+  const [sortOrder, setSortOrder] = useState(initial?.sortOrder ?? "");
   const [noGrantDates, setNoGrantDates] = useState(initial?.noGrantDates || []);
   const [noLeave, setNoLeave] = useState(initial?.noLeave || false);
 
@@ -348,6 +347,7 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
         employmentType,
         noGrantDates,
         noLeave,
+        sortOrder: sortOrder === "" ? null : Number(sortOrder),
       };
       if (isEdit) {
         await upsertStaff(initial.id, staffData);
@@ -454,10 +454,22 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
         </div>
       </div>
 
-      <label style={S.fieldLabel}>雇用区分（一覧の並び順に使います）</label>
-      <div style={S.quickRow}>
-        <button type="button" style={employmentType === "full" ? S.quickBtnOn : S.quickBtn} onClick={() => setEmploymentType("full")}>常勤</button>
-        <button type="button" style={employmentType === "part" ? S.quickBtnOn : S.quickBtn} onClick={() => setEmploymentType("part")}>非常勤</button>
+      <div className="grid2" style={S.grid2}>
+        <div>
+          <label style={S.fieldLabel}>雇用区分（一覧のグループ分けに使います）</label>
+          <div style={S.quickRow}>
+            <button type="button" style={employmentType === "full" ? S.quickBtnOn : S.quickBtn} onClick={() => setEmploymentType("full")}>常勤</button>
+            <button type="button" style={employmentType === "part" ? S.quickBtnOn : S.quickBtn} onClick={() => setEmploymentType("part")}>非常勤</button>
+            <button type="button" style={employmentType === "family" ? S.quickBtnOn : S.quickBtn} onClick={() => setEmploymentType("family")}>家族・専従</button>
+          </div>
+        </div>
+        <div>
+          <label style={S.fieldLabel}>
+            並び順
+            <span style={S.hint}>小さい数字ほど上に表示（空欄なら入職日順）</span>
+          </label>
+          <input type="number" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} style={S.input} placeholder="例: 1" />
+        </div>
       </div>
 
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, margin: "10px 0 4px", fontWeight: 700 }}>

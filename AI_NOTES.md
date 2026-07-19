@@ -15,7 +15,7 @@
 
 ## データ構造（Firestore）
 - `staff/{uid}`: { name, role, loginId, joinDate "YYYY-MM-DD", workDaysPerWeek, dailyMinutes, minutesPerDay: {sun..sat: 分}, status?: "active"|"retired", retiredDate?, employmentType?: "full"|"part", noGrantDates?: ["YYYY-MM-DD"] }
-  - employmentType: 常勤/非常勤（未設定は週5以上を常勤扱い。empTypeOf in StaffManager）。職員カードは常勤/非常勤でグループ表示・入職日順。
+  - employmentType: "full"常勤/"part"非常勤/"family"家族・専従（未設定は週5以上を常勤扱い。empTypeOf）。sortOrder?: 数値（小さいほど上・空欄は入職日順）。並びはstaffCompare（常勤→非常勤→家族・専従→各グループ内sortOrder→入職日）で職員カード・スタッフ管理・管理簿・給与アプリ共通。
   - noGrantDates: 出勤率8割未満で「付与なし」にした付与日。その年は0日付与、勤続段階は進む。スタッフ編集のチェックボックスで設定。
   - noLeave?: true = 有給の付与対象外（専従者・年間所定48日未満の隔週勤務など）。calcBalance/fiveDayProgress/expiringGrants/attendance系が全て空を返し、管理簿からも除外。本人画面は案内のみ。給与明細アプリの台帳としては使われる。スタッフ編集のチェックで設定。
   - status="retired" は退職者。一覧・カレンダー・計画年休・管理簿・自動反映から除外され、本人ログインは「退職済み」でブロック。復帰は unretireStaff。完全削除は deleteStaffCompletely（記録ごと。Authはコンソールで別途削除）。

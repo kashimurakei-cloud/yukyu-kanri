@@ -1,6 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
-import { calcBalance, calcGrants, fiveDayProgress, fmt, todayStr } from "../lib/leave";
+import { calcBalance, calcGrants, fiveDayProgress, fmt, todayStr, staffCompare } from "../lib/leave";
 
 /* 年次有給休暇管理簿（労基法で作成・3年保存が義務の帳票）
    画面では非表示、印刷時のみ出力される（1人1ページ） */
@@ -9,7 +9,7 @@ export default function PrintLedger({ staffList, recordsByStaff }) {
   const WD = ["日", "月", "火", "水", "木", "金", "土"];
   return createPortal(
     <div className="yk-print">
-      {staffList.filter((s) => !s.noLeave).map((s) => {
+      {[...staffList].filter((s) => !s.noLeave).sort(staffCompare).map((s) => {
         const records = [...(recordsByStaff[s.id] || [])].sort((a, b) => (a.date < b.date ? -1 : 1));
         const bal = calcBalance(s, records);
         const grants = calcGrants(s.joinDate, s.workDaysPerWeek, undefined, s.noGrantDates || []);

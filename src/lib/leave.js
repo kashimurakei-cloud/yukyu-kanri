@@ -159,11 +159,22 @@ export function calcBalance(staff, records, asOf = todayStr()) {
   };
 }
 
-// 常勤/非常勤（employmentType未設定の古いデータは週5以上を常勤とみなす）
+// 常勤/非常勤/家族・専従（employmentType未設定の古いデータは週5以上を常勤とみなす）
 export function empTypeOf(s) {
   return s.employmentType || (Number(s.workDaysPerWeek) >= 5 ? "full" : "part");
 }
-export const EMP_LABEL = { full: "常勤", part: "非常勤" };
+export const EMP_LABEL = { full: "常勤", part: "非常勤", family: "家族・専従" };
+
+// 一覧の並び順: 常勤 → 非常勤 → 家族・専従、同グループ内は並び順(sortOrder・小さいほど上)→入職日順
+const EMP_ORDER = { full: 0, part: 1, family: 2 };
+export function staffCompare(a, b) {
+  const t = (EMP_ORDER[empTypeOf(a)] ?? 1) - (EMP_ORDER[empTypeOf(b)] ?? 1);
+  if (t !== 0) return t;
+  const soa = a.sortOrder ?? 9999;
+  const sob = b.sortOrder ?? 9999;
+  if (soa !== sob) return soa - sob;
+  return (a.joinDate || "") < (b.joinDate || "") ? -1 : 1;
+}
 
 // その日時点で使える残（その日以前の記録だけで計算）。
 // 計画年休の反映時に「残が足りないパートには充てない」判定に使う。

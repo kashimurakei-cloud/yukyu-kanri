@@ -114,6 +114,17 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   check("employmentType優先", empTypeOf({ employmentType: "part", workDaysPerWeek: 5 }) === "part");
   check("未設定は週5以上=常勤", empTypeOf({ workDaysPerWeek: 5 }) === "full" && empTypeOf({ workDaysPerWeek: 3 }) === "part");
 }
+// staffCompare: 常勤→非常勤→家族・専従、同グループはsortOrder→入職日
+{
+  const { staffCompare } = await import("../src/lib/leave.js");
+  const a = { name: "常勤2", employmentType: "full", sortOrder: 2, joinDate: "2020-01-01" };
+  const b = { name: "常勤1", employmentType: "full", sortOrder: 1, joinDate: "2024-01-01" };
+  const c = { name: "パート", employmentType: "part", joinDate: "2010-01-01" };
+  const d = { name: "家族", employmentType: "family", joinDate: "2000-01-01" };
+  const e = { name: "常勤3", employmentType: "full", joinDate: "2018-01-01" }; // sortOrderなし→グループ末尾
+  const sorted = [d, c, a, e, b].sort(staffCompare).map((x) => x.name);
+  check("並び順が正しい", JSON.stringify(sorted) === JSON.stringify(["常勤1", "常勤2", "常勤3", "パート", "家族"]));
+}
 
 // 出勤率8割の確認（勤怠は任意入力・算定期間内の月だけ集計）
 {

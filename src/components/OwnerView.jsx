@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { calcBalance, nextGrant, calcUpcomingPlanned, fmt, fmtW, todayStr, weekdayKeyOf, addMonths, attendancePeriods, groupRecordsByPeriod } from "../lib/leave";
+import { calcBalance, nextGrant, calcUpcomingPlanned, fmt, fmtW, todayStr, weekdayKeyOf, addMonths, attendancePeriods, groupRecordsByPeriod, staffCompare } from "../lib/leave";
 import {
   getAllStaff,
   getLeaveRecords,
@@ -208,11 +208,13 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
   const groups = [
     { type: "full", label: EMP_LABEL.full, rows: [] },
     { type: "part", label: EMP_LABEL.part, rows: [] },
+    { type: "family", label: EMP_LABEL.family, rows: [] },
   ];
   for (const r of rows) {
-    (empTypeOf(r.s) === "full" ? groups[0] : groups[1]).rows.push(r);
+    const t = empTypeOf(r.s);
+    (groups.find((g) => g.type === t) || groups[1]).rows.push(r);
   }
-  for (const g of groups) g.rows.sort((a, b) => ((a.s.joinDate || "") < (b.s.joinDate || "") ? -1 : 1));
+  for (const g of groups) g.rows.sort((a, b) => staffCompare(a.s, b.s));
 
   return (
     <>
