@@ -9,7 +9,7 @@ export default function PrintLedger({ staffList, recordsByStaff }) {
   const WD = ["日", "月", "火", "水", "木", "金", "土"];
   return createPortal(
     <div className="yk-print">
-      {staffList.map((s) => {
+      {staffList.filter((s) => !s.noLeave).map((s) => {
         const records = [...(recordsByStaff[s.id] || [])].sort((a, b) => (a.date < b.date ? -1 : 1));
         const bal = calcBalance(s, records);
         const grants = calcGrants(s.joinDate, s.workDaysPerWeek, undefined, s.noGrantDates || []);

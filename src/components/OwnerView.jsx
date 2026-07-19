@@ -245,10 +245,16 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
                   <span style={{ fontSize: 16, fontWeight: 800 }}>{s.name}</span>
                   <span style={{ fontSize: 11.5, color: "#8a857a" }}>週{s.workDaysPerWeek}日</span>
                 </div>
+                {s.noLeave ? (
+                  <div style={{ fontSize: 14, fontWeight: 700, margin: "8px 0", color: "#8a857a" }}>
+                    有給の付与対象外
+                  </div>
+                ) : (
                 <div style={{ fontSize: 26, fontWeight: 800, margin: "6px 0 2px" }}>
                   {bal.remainMin.toLocaleString()}<span style={{ fontSize: 13 }}>分</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: "#8a857a", marginLeft: 8 }}>残（約{remainDays.toFixed(1)}日分）</span>
                 </div>
+                )}
                 {five && (
                   <div style={{ margin: "8px 0 2px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700, color: fiveColor }}>
@@ -276,7 +282,7 @@ function OverviewTab({ staffList, recordsByStaff, pendingPlanned, onChanged, sho
                   ))}
                 </div>
                 <div style={{ fontSize: 11.5, color: "#8a857a", marginTop: 8 }}>
-                  次回付与 {ng ? `${fmt(ng.grantDate)}（${ng.days}日）` : "—"}
+                  次回付与 {s.noLeave ? "対象外" : ng ? `${fmt(ng.grantDate)}（${ng.days}日）` : "—"}
                 </div>
               </button>
             );
@@ -366,7 +372,7 @@ function StaffHistoryCard({ staff, records, onClose, onChanged, showToast, onPre
   const bal = calcBalance(staff, records);
   const daily = bal.daily;
   const sorted = [...records].sort((a, b) => (a.date < b.date ? 1 : -1));
-  const ng = nextGrant(staff.joinDate, staff.workDaysPerWeek);
+  const ng = staff.noLeave ? null : nextGrant(staff.joinDate, staff.workDaysPerWeek);
   const [editing, setEditing] = useState(null);
   const [showProxy, setShowProxy] = useState(false);
   const [showAdjust, setShowAdjust] = useState(false);

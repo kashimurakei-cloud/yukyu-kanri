@@ -160,6 +160,16 @@ console.log("=== LEAVE: FIFO消化（時効2年） ===");
   check("初回付与前グループ", gs[3].start === null && gs[3].records[0].id === "a");
 }
 
+// 有給の付与対象外(noLeave): 専従者・年間所定48日未満など
+{
+  const { fiveDayProgress } = await import("../src/lib/leave.js");
+  const staff = { joinDate: "2015-04-01", workDaysPerWeek: 1, dailyMinutes: 480, noLeave: true };
+  const bal = calcBalance(staff, [], "2026-07-16");
+  check("対象外は付与ゼロ", bal.grants.length === 0 && bal.grantedMin === 0 && bal.remainMin === 0);
+  check("対象外は5日義務なし", fiveDayProgress(staff, [], "2026-07-16") === null);
+  check("対象外は時効警告なし", expiringGrants(staff, [], "2026-07-16").length === 0);
+}
+
 console.log("=== LEAVE: 時効警告もFIFO基準 ===");
 {
   // 初回付与が90日以内に時効を迎えるケース

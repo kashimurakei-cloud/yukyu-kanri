@@ -11,7 +11,7 @@ export function analyzeAll(staffList, recordsByStaff, pendingPlanned) {
   return staffList.map((s) => {
     const records = recordsByStaff[s.id] || [];
     const bal = calcBalance(s, records);
-    const ng = nextGrant(s.joinDate, s.workDaysPerWeek);
+    const ng = s.noLeave ? null : nextGrant(s.joinDate, s.workDaysPerWeek);
     const up = calcUpcomingPlanned(s, pendingPlanned);
     const forecast = bal.remainMin - up.minutes;
     const five = fiveDayProgress(s, records);

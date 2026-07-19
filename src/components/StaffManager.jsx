@@ -303,6 +303,7 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
   const [dailyMinutes, setDailyMinutes] = useState(initial?.dailyMinutes || 480);
   const [employmentType, setEmploymentType] = useState(initial ? empTypeOf(initial) : "full");
   const [noGrantDates, setNoGrantDates] = useState(initial?.noGrantDates || []);
+  const [noLeave, setNoLeave] = useState(initial?.noLeave || false);
 
   // これまでの付与日一覧（付与なし設定のチェックボックス用）
   const grantDates = isEdit && joinDate
@@ -346,6 +347,7 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
         minutesPerDay,
         employmentType,
         noGrantDates,
+        noLeave,
       };
       if (isEdit) {
         await upsertStaff(initial.id, staffData);
@@ -457,6 +459,15 @@ function StaffForm({ initial, onCancel, onSaved, onOpenGuide, onDelete }) {
         <button type="button" style={employmentType === "full" ? S.quickBtnOn : S.quickBtn} onClick={() => setEmploymentType("full")}>常勤</button>
         <button type="button" style={employmentType === "part" ? S.quickBtnOn : S.quickBtn} onClick={() => setEmploymentType("part")}>非常勤</button>
       </div>
+
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, margin: "10px 0 4px", fontWeight: 700 }}>
+        <input type="checkbox" checked={noLeave} onChange={(e) => setNoLeave(e.target.checked)} />
+        有給の付与対象外にする
+      </label>
+      <p style={S.noteSmall}>
+        専従者や、年間の所定労働日数が48日未満（隔週1日など）で法律上の付与が無い人向け。
+        チェックすると付与・残数・警告の計算から外れます（給与明細アプリの対象にはなります）。
+      </p>
 
       <label style={S.fieldLabel}>
         曜日ごとの勤務分（計画年休の自動反映に使用）

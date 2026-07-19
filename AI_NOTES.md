@@ -17,6 +17,7 @@
 - `staff/{uid}`: { name, role, loginId, joinDate "YYYY-MM-DD", workDaysPerWeek, dailyMinutes, minutesPerDay: {sun..sat: 分}, status?: "active"|"retired", retiredDate?, employmentType?: "full"|"part", noGrantDates?: ["YYYY-MM-DD"] }
   - employmentType: 常勤/非常勤（未設定は週5以上を常勤扱い。empTypeOf in StaffManager）。職員カードは常勤/非常勤でグループ表示・入職日順。
   - noGrantDates: 出勤率8割未満で「付与なし」にした付与日。その年は0日付与、勤続段階は進む。スタッフ編集のチェックボックスで設定。
+  - noLeave?: true = 有給の付与対象外（専従者・年間所定48日未満の隔週勤務など）。calcBalance/fiveDayProgress/expiringGrants/attendance系が全て空を返し、管理簿からも除外。本人画面は案内のみ。給与明細アプリの台帳としては使われる。スタッフ編集のチェックで設定。
   - status="retired" は退職者。一覧・カレンダー・計画年休・管理簿・自動反映から除外され、本人ログインは「退職済み」でブロック。復帰は unretireStaff。完全削除は deleteStaffCompletely（記録ごと。Authはコンソールで別途削除）。
 - `staff/{uid}/leaveRecords/{id}`: { date, minutes, type: "normal"|"planned", memo, plannedId?, createdAt }
 - `staff/{uid}/attendance/{YYYY-MM}`: { month, worked(出勤数), absent(欠勤数) }。出勤率8割確認用の任意入力（確認したい人だけ）。履歴カードの「📋 勤怠を記録」から。attendanceRateForが次回付与の算定期間（前回付与日〜、初回は入職日〜）の率を計算。attendancePeriodsは過去の付与期間ごとの率一覧（過去数年分の後入れ対応・新しい順・入力のない期間は出さない）。8割未満は「付与なし候補」表示。有給で休んだ日は出勤に数える運用。

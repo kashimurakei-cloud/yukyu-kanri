@@ -38,7 +38,7 @@ export default function StaffView({ me, impersonated = false }) {
   }, [me.id]);
 
   const bal = useMemo(() => calcBalance(me, records), [me, records]);
-  const ng = nextGrant(me.joinDate, me.workDaysPerWeek);
+  const ng = me.noLeave ? null : nextGrant(me.joinDate, me.workDaysPerWeek);
   const upcoming = useMemo(() => calcUpcomingPlanned(me, planned), [me, planned]);
   const daily = bal.daily;
   const forecastMin = bal.remainMin - upcoming.minutes;
@@ -72,6 +72,23 @@ export default function StaffView({ me, impersonated = false }) {
       console.error(e);
       alert("取り消しに失敗しました。");
     }
+  }
+
+  // 有給の付与対象外（専従者・年間所定48日未満など）は案内だけ表示
+  if (me.noLeave) {
+    return (
+      <>
+        <section style={S.card}>
+          <h2 style={S.cardTitle}>有給の付与対象外です</h2>
+          <p style={S.empty}>
+            あなたは有給休暇の付与対象外のため、このアプリでの有給管理はありません。
+            ご不明な点は院長にお尋ねください。
+          </p>
+        </section>
+        {!impersonated && <PasswordCard showToast={showToast} />}
+        <Toast toast={toast} onClose={() => setToast(null)} />
+      </>
+    );
   }
 
   return (

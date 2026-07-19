@@ -537,6 +537,7 @@ try {
   html = rootEl.innerHTML;
   console.log("雇用区分ボタン:", html.includes("雇用区分") && html.includes("非常勤"));
   console.log("付与なし設定の一覧:", html.includes("付与なしの年") && html.includes("を付与なしにする"));
+  console.log("付与対象外チェック:", html.includes("有給の付与対象外にする"));
   click(byText(rootEl, "button", "キャンセル"));
   await wait(200);
 
