@@ -258,37 +258,48 @@ export async function applyDuePlannedLeaves(allStaff, asOf = todayStr()) {
     }
   }
 
-  if (skippedShort.length > 0) {
-    const byDate = {};
-    for (const x of skippedShort) {
-      byDate[x.date] = byDate[x.date] || [];
-      byDate[x.date].push(x.staffName);
-    }
-    for (const date of Object.keys(byDate)) {
-      await addNotification({
-        staffUid: "",
-        staffName: "計画年休",
-        action: date + " の計画年休: " + byDate[date].join("・") + " は残不足（または未付与）のため反映していません",
-        date,
-        minutes: 0,
-      });
-    }
-  }
+  // 同じ内容の通知は一度だけ（画面を開くたびに再チェックされるため、既読でも復活しないように）
+  if (skippedShort.length > 0 || appliedSummaries.length > 0) {
+    const existingNotifs = await getNotifications();
+    const seenActions = new Set(existingNotifs.map((n) => n.action));
+    const notifyOnce = async (payload) => {
+      if (seenActions.has(payload.action)) return;
+      seenActions.add(payload.action);
+      await addNotification(payload);
+    };
 
-  if (appliedSummaries.length > 0) {
-    const byDate = {};
-    for (const a of appliedSummaries) {
-      byDate[a.date] = byDate[a.date] || [];
-      byDate[a.date].push(a.staffName);
+    if (skippedShort.length > 0) {
+      const byDate = {};
+      for (const x of skippedShort) {
+        byDate[x.date] = byDate[x.date] || [];
+        byDate[x.date].push(x.staffName);
+      }
+      for (const date of Object.keys(byDate)) {
+        await notifyOnce({
+          staffUid: "",
+          staffName: "計画年休",
+          action: date + " の計画年休: " + byDate[date].join("・") + " は残不足（または未付与）のため反映していません",
+          date,
+          minutes: 0,
+        });
+      }
     }
-    for (const date of Object.keys(byDate)) {
-      await addNotification({
-        staffUid: "",
-        staffName: "計画年休",
-        action: date + " の計画年休を反映（" + byDate[date].join("・") + "）",
-        date,
-        minutes: 0,
-      });
+
+    if (appliedSummaries.length > 0) {
+      const byDate = {};
+      for (const a of appliedSummaries) {
+        byDate[a.date] = byDate[a.date] || [];
+        byDate[a.date].push(a.staffName);
+      }
+      for (const date of Object.keys(byDate)) {
+        await notifyOnce({
+          staffUid: "",
+          staffName: "計画年休",
+          action: date + " の計画年休を反映（" + byDate[date].join("・") + "）",
+          date,
+          minutes: 0,
+        });
+      }
     }
   }
   return appliedSummaries;

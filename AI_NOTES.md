@@ -55,6 +55,10 @@
 - 完全削除は暗証番号必須（StaffManagerのDELETE_PIN="0000"。変更はこの定数を書き換える）。
 - Firestoreルール: staff/{uid}/attendance は院長のみ読み書き（コンソールで設定済み）。新しいサブコレクションを追加したらルールにもmatchブロック追加が必要。
 
+## 通知の重複防止（2026-07）
+- applyDuePlannedLeaves は院長画面を開くたびに実行されるため、「残不足で反映していません」等の通知が毎回作り直され既読でも復活するバグがあった。
+- 修正: 通知作成前に getNotifications() で既存の action 文字列と突合し、同じ内容は二度作らない（notifyOnce）。
+
 ## 作業ルール
 1. 変更前に方針を短く説明し、承認を得てからコードを書く。
 2. 変更後は必ず `npm run build` と `npm test` を実行し、`✅ all passed` を確認してから納品する。

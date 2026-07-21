@@ -57,7 +57,10 @@ globalThis.__DB = {
     { id: "rb1", date: daysFrom(-100), minutes: 420, type: "normal", memo: "" },
     { id: "rb2", date: DUP_DAY, minutes: 420, type: "normal", memo: "通院" },
   ],
-  "notifications": [],
+  "notifications": [
+    // 既読済みの「反映」通知。同じ内容が再度作られない（＝既読にしても復活しない）ことの検証用
+    { id: "n-old", staffUid: "", staffName: "計画年休", action: PAST_MON + " の計画年休を反映（佐藤 花子）", date: PAST_MON, minutes: 0, read: true },
+  ],
   "plannedLeaves": [
     { id: "p1", date: daysFrom(20), memo: "院内研修日", status: "pending" },
     // 反映済なのに誰にも記録が無い（＝反映後にスタッフ登録された想定）→ 起動時に追い反映されるはず
@@ -224,6 +227,8 @@ try {
   console.log("=== PLANNED: 追い反映 ===");
   console.log("反映済でも未反映の人に追い反映:", globalThis.__DB["staff/u-a/leaveRecords"].some((r) => r.plannedId === "p2"));
   console.log("勤務日でない人には入らない:", !globalThis.__DB["staff/u-b/leaveRecords"].some((r) => r.plannedId === "p2"));
+  const dupActs = globalThis.__DB["notifications"].map((n) => n.action);
+  console.log("既読の通知が復活しない(重複なし):", dupActs.length === new Set(dupActs).size);
 
   /* 職員カード */
   click(byText(rootEl, "button", "職員"));
